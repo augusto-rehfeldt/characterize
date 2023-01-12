@@ -1,5 +1,5 @@
 import rank
-import caracteres
+import characters
 
 import os
 import sys
@@ -411,7 +411,7 @@ if __name__ == "__main__":
     nivel_detalle_caracter = 15 if idioma in [
         "hiragana", "katakana", "kanji", "chinese", "hangul", "arabic"] else (16 if idioma == "braille" else 12)
 
-    dict_caracteres = caracteres.dict_caracteres
+    dict_caracteres = characters.dict_caracteres
 
     try:
         font = ImageFont.truetype(fuentes[idioma], 10)
