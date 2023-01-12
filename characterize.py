@@ -306,7 +306,7 @@ def parse_arguments():
     parser.add_argument('-cr',
                         '--cr', type=int, help='character resolution parameter ONE (1 to 4000)')
     parser.add_argument('-cl',
-                        '--cl', type=int, help='complexity level parameter ONE (1 to 4000)')
+                        '--cl', type=int, help='complexity level parameter ONE (1 to 40)')
     parser.add_argument('-l',
                         '--l', type=str, help='language parameter ONE [ascii, chinese, ...]')
     parser.add_argument('-d',
@@ -497,8 +497,6 @@ if __name__ == "__main__":
         l = 0
         m = 0
         n = t
-
-        # e:/python/characterize/paleoart
 
         pool = mp.ProcessingPool(t)
 
