@@ -1,5 +1,5 @@
 import rank
-import characters
+import caracteres
 
 import os
 import sys
@@ -57,13 +57,11 @@ def divide_list(lst: list, n: int):
 def amplify_differences(values, threshold):
     values = np.array(values)
     deviations = np.abs(values - threshold)
-    max_deviation = np.max(deviations)
-    if max_deviation == 0:
-        return values
-    amplification_factors = np.where(
-        values >= threshold, 1 + deviations, 1 - deviations)
+    
+    amplification_factors = np.where(values >= threshold, 1 + deviations, 1 - deviations)
     amplified_values = np.clip(values * amplification_factors, 0, 1)
-    return amplified_values.tolist()
+    
+    return amplified_values
 
 
 def create_char_image(caracter, color, detail, font):
@@ -122,109 +120,96 @@ def unite_image(caracteres, original_width, original_height, nivel_detalle_carac
     return new_image
 
 
+
+def divide_image(image, min_size):
+    """
+    Divide the image into smaller parts if its size exceeds the min_size.
+    """
+    image_list = [image]
+    
+    while image_list[0].size[0] * image_list[0].size[1] >= min_size:
+        temp_list = []
+        for img in image_list:
+            temp_list.extend([
+                img.crop((0, 0, img.width // 2, img.height // 2)),
+                img.crop((img.width // 2, 0, img.width, img.height // 2)),
+                img.crop((0, img.height // 2, img.width // 2, img.height)),
+                img.crop((img.width // 2, img.height // 2, img.width, img.height))
+            ])
+        image_list = temp_list.copy()
+        
+    return image_list
+
+
 def rutina(image, lista_caracteres, dict_imagenes_caracteres, detalle, dividir, formato, resize, color, folder_name, tkinter):
     t_image = time.time()
     image_name = "".join([x for x in image])
+
+    # Inform if tkinter is being used
     if tkinter:
-        print(
-            f"<<{image_name}<<P>>")
+        print(f"<<{image_name}<<P>>")
+
+    # Convert to Image object if not already
     if not isinstance(image, Image.Image):
-        image_ = Image.open(image)
-        image_ = image_.convert('RGB')
-        if resize[1][0]*resize[1][1] >= 1000000:
-            dividir = True
+        image = Image.open(image).convert('RGB')
+        
+        # Resize the image if needed
         if resize[0]:
-            factor_resize = max(
-                image_.size[0]/resize[1][0], image_.size[1]/resize[1][1])
-            image_ = image_.resize(
-                (int(image_.size[0]/factor_resize), int(image_.size[1]/factor_resize)), resample=Image.Resampling.BOX)
-        if max(image_.size) > 3840:
-            # resize to 3840 equivalent
-            image_ = image_.resize(image_.width//(max(
-                image_.size)//3840), image_.height//(max(image_.size)//3840), resample=Image.Resampling.BOX)
-    else:
-        image_ = image.convert('RGB')
-
-    if dividir:
-        if (image_.size[0]*image_.size[1]) >= 408960:
-            image_list = [image_.crop((0, 0, image_.width//2, image_.height//2)), image_.crop((image_.width//2, 0, image_.width, image_.height//2)), image_.crop(
-                (0, image_.height//2, image_.width//2, image_.height)), image_.crop((image_.width//2, image_.height//2, image_.width, image_.height))]
-            if (image_.size[0]*image_.size[1]) >= 921600:
-                image_list_b = image_list.copy()
-                image_list = []
-                for image in image_list_b:
-                    image_aux_list = [image.crop((0, 0, image.width//2, image.height//2)), image.crop((image.width//2, 0, image.width, image.height//2)), image.crop(
-                        (0, image.height//2, image.width//2, image.height)), image.crop((image.width//2, image.height//2, image.width, image.height))]
-                    image_list.extend(image_aux_list)
-                if (image_.size[0]*image_.size[1]) >= 2073600:
-                    image_list_c = image_list.copy()
-                    image_list = []
-                    for image in image_list_c:
-                        image_aux_list = [image.crop((0, 0, image.width//2, image.height//2)), image.crop((image.width//2, 0, image.width, image.height//2)), image.crop(
-                            (0, image.height//2, image.width//2, image.height)), image.crop((image.width//2, image.height//2, image.width, image.height))]
-                        image_list.extend(image_aux_list)
-                    if (image_.size[0]*image_.size[1]) >= 8294400:
-                        image_list_d = image_list.copy()
-                        image_list = []
-                        for image in image_list_d:
-                            image_aux_list = [image.crop((0, 0, image.width//2, image.height//2)), image.crop((image.width//2, 0, image.width, image.height//2)), image.crop(
-                                (0, image.height//2, image.width//2, image.height)), image.crop((image.width//2, image.height//2, image.width, image.height))]
-                            image_list.extend(image_aux_list)
+            factor_resize = max(image.size[0]/resize[1][0], image.size[1]/resize[1][1])
+            image = image.resize((int(image.size[0]/factor_resize), int(image.size[1]/factor_resize)), resample=Image.Resampling.BOX)
+        
+        # If the image is too big, divide it into smaller parts
+        if dividir:
+            image_list = divide_image(image, 408960)
         else:
-            image_list = [image_]
+            image_list = [image]
     else:
-        image_list = [image_]
+        image = image.convert('RGB')
+        image_list = [image]
 
+    # Process each divided image or the whole image
     for im in image_list:
         im = ImageEnhance.Color(im).enhance(2)
-        caracteres_imagen = get_chars(
-            im, lista_caracteres, dict_imagenes_caracteres, formato, color=color)
+        caracteres_imagen = get_chars(im, lista_caracteres, dict_imagenes_caracteres, formato, color=color)
 
+        # If saving as text
         if "txt" in formato:
             image_name = image_name.replace("\\", "/")
-            filename = f"{os.path.join(characterize_path, folder_name)}/{''.join(image_name.split('/')[-1].split('.')[:-1])}"+'.txt'
+            filename = os.path.join(os.path.join(characterize_path, folder_name), ''.join(image_name.split('/')[-1].split('.')[:-1]) + '.txt')
             with open(filename, "w") as f:
-                for x in caracteres_imagen[1]:
-                    string_x = " ".join(x)
-                    f.write(f"{string_x}\n")
+                f.writelines([' '.join(line) + '\n' for line in caracteres_imagen[1]])
             if tkinter:
-                print(
-                    f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
+                print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
 
-        if any(x in formato for x in ["png", "jpg"]):
-            imagen_final = unite_image(
-                caracteres_imagen[0], im.width, im.height, detalle)
-
-            # resize without blur
-            im = im.resize(
-                (im.width*detalle, im.height*detalle), resample=Image.Resampling.BOX)
+        # If saving as image
+        if any(ext in formato for ext in ["png", "jpg"]):
+            imagen_final = unite_image(caracteres_imagen[0], im.width, im.height, detalle)
+            im = im.resize((im.width * detalle, im.height * detalle), resample=Image.Resampling.BOX)
             bg_w, bg_h = im.size
             img_w, img_h = imagen_final.size
             offset = ((bg_w - img_w) // 2, (bg_h - img_h) // 2)
             im.paste(imagen_final, offset, imagen_final)
             im = im.convert("RGB")
-
+            
+            # Save the image
             def save_image(image, formato, color, filename):
-                if any(x in formato for x in ["png", "jpg"]):
-                    if "png" in formato:
-                        if color:
-                            image = image.quantize(colors=256)
-                        image.save(
-                            filename + ".png", compress_level=9)
-                    if "jpg" in formato:
-                        if color:
-                            image = image.quantize(colors=256)
-                        image.save(filename+".jpg")
+                if "png" in formato:
+                    if color:
+                        image = image.quantize(colors=256)
+                    image.save(filename + ".png", compress_level=9)
+                if "jpg" in formato:
+                    if color:
+                        image = image.quantize(colors=256)
+                    image.save(filename + ".jpg")
 
             image_name = image_name.replace("\\", "/")
-            filename = f"{os.path.join(characterize_path, folder_name)}/{''.join(image_name.split('/')[-1].split('.')[:-1])}"
+            filename = os.path.join(os.path.join(characterize_path, folder_name), ''.join(image_name.split('/')[-1].split('.')[:-1]))
 
             if tkinter:
-                print(
-                    f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in formato else filename+'.jpg'}>>")
+                print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in formato else filename+'.jpg'}>>")
 
-            thread = threading.Thread(
-                target=save_image, args=(im, formato, color, filename), daemon=True)
+            # Start the thread for saving the image
+            thread = threading.Thread(target=save_image, args=(im, formato, color, filename), daemon=True)
             thread.start()
             thread.join()
 
@@ -306,7 +291,7 @@ def parse_arguments():
     parser.add_argument('-cr',
                         '--cr', type=int, help='character resolution parameter ONE (1 to 4000)')
     parser.add_argument('-cl',
-                        '--cl', type=int, help='complexity level parameter ONE (1 to 40)')
+                        '--cl', type=int, help='complexity level parameter ONE (1 to 4000)')
     parser.add_argument('-l',
                         '--l', type=str, help='language parameter ONE [ascii, chinese, ...]')
     parser.add_argument('-d',
@@ -326,19 +311,28 @@ def parse_arguments():
         args.cr, int) else (False, False)
     cl = args.cl
     l = args.l
-    d = (True, True) if any(x == args.d.lower()
-                            for x in ["true", "t", "yes", "y"]) else ((True, False) if any(x == args.d.lower()
-                                                                                           for x in ["false", "f", "no", "n"]) else (False, False))
-    c = (True, True) if any(x == args.c.lower()
-                            for x in ["true", "t", "yes", "y"]) else ((True, False) if any(x == args.c.lower()
-                                                                                           for x in ["false", "f", "no", "n"]) else (False, False))
-    f = " ".join(args.f)
-    o = (True, True) if any(x == args.o.lower()
-                            for x in ["true", "t", "yes", "y"]) else ((True, False) if any(x == args.o.lower()
-                                                                                           for x in ["false", "f", "no", "n"]) else (False, False))
+
+    if args.d is not None:
+        d = (True, True) if any(x == args.d.lower() for x in ["true", "t", "yes", "y"]) else ((True, False) if any(x == args.d.lower() for x in ["false", "f", "no", "n"]) else (False, False))
+    else:
+        d = (False, False)
+
+    if args.c is not None:
+        c = (True, True) if any(x == args.c.lower() for x in ["true", "t", "yes", "y"]) else ((True, False) if any(x == args.c.lower() for x in ["false", "f", "no", "n"]) else (False, False))
+    else:
+        c = (False, False)
+
+    f = " ".join(args.f) if args.f is not None else None
+
+    if args.o is not None:
+        o = (True, True) if any(x == args.o.lower() for x in ["true", "t", "yes", "y"]) else ((True, False) if any(x == args.o.lower() for x in ["false", "f", "no", "n"]) else (False, False))
+    else:
+        o = (False, False)
+
     tk = args.tk
 
     return l, cl, c, input_files, cr, d, f, o, tk
+
 
 
 if __name__ == "__main__":
@@ -411,7 +405,7 @@ if __name__ == "__main__":
     nivel_detalle_caracter = 15 if idioma in [
         "hiragana", "katakana", "kanji", "chinese", "hangul", "arabic"] else (16 if idioma == "braille" else 12)
 
-    dict_caracteres = characters.dict_caracteres
+    dict_caracteres = caracteres.dict_caracteres
 
     try:
         font = ImageFont.truetype(fuentes[idioma], 10)
@@ -497,6 +491,8 @@ if __name__ == "__main__":
         l = 0
         m = 0
         n = t
+
+        # e:/python/characterize/paleoart
 
         pool = mp.ProcessingPool(t)
 
