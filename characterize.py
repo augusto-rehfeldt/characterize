@@ -492,8 +492,6 @@ if __name__ == "__main__":
         m = 0
         n = t
 
-        # e:/python/characterize/paleoart
-
         pool = mp.ProcessingPool(t)
 
         while num_iterations > 0:
