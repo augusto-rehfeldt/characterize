@@ -423,15 +423,15 @@ class App:
                 for line in iter(process.stdout.readline, ""):
                     if not line:
                         break
-                    line = str(line)[2:-1].strip()
+                    line = line.decode('utf-8').strip()
                     for inf in line.split(">>"):
-                        if inf.count("<<") == 2:
+                        segments = inf.split("<<")
+                        if len(segments) == 3:
                             self.thread_queue.append(
-                                (inf.split("<<")[1], inf.split("<<")[2].replace("\\r\\n", "")))
-                        elif inf.count("<<") == 3:
+                                (segments[1], segments[2].replace("\\r\\n", "")))
+                        elif len(segments) == 4:
                             self.thread_queue.append(
-                                (inf.split("<<")[1], inf.split("<<")[2], inf.split("<<")[3].replace(
-                                    "\\\\", "/").replace("\\r\\n", "")))
+                                (segments[1], segments[2], segments[3].replace("\\\\", "/").replace("\\r\\n", "")))
                 process.wait()
             self.thread_queue.append("enable")
 
