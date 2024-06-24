@@ -1,0 +1,6 @@
+numpy==2.0.0
+opencv_python==4.9.0.80
+opencv_python_headless==4.9.0.80
+pathos==0.3.2
+Pillow==10.3.0
+tqdm==4.64.0

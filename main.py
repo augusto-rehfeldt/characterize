@@ -286,7 +286,7 @@ class App:
         ]
 
         tree_filenames = [self.tree.item(line)['values'][0]
-                          for line in self.tree.get_children()]
+                        for line in self.tree.get_children()]
 
         filenames = sorted([x for x in filedialog.askopenfilenames(
             title='Open a file', initialdir='/', filetypes=filetypes) if not x in tree_filenames])
@@ -300,7 +300,7 @@ class App:
             fingerprints.append(fingerprint)
             file_stats = os.stat(file)
             indexes = [int(self.tree.item(line)['text'])
-                       for line in self.tree.get_children()]
+                    for line in self.tree.get_children()]
             index = find_lowest_value(indexes) if len(indexes) > 0 else 0
             index = str(index)
             self.tree.insert("", "end", text=index, values=(file, file.split(
@@ -314,7 +314,7 @@ class App:
         self.cycle_buttons(True)
 
         tree_filenames = [self.tree.item(line)['values'][0]
-                          for line in self.tree.get_children()]
+                        for line in self.tree.get_children()]
 
         folder = filedialog.askdirectory(
             initialdir='/', title='Select a folder',)
@@ -333,11 +333,11 @@ class App:
             fingerprints.append(fingerprint)
             file_stats = os.stat(file)
             indexes = [int(self.tree.item(line)['text'])
-                       for line in self.tree.get_children()]
+                    for line in self.tree.get_children()]
             index = find_lowest_value(indexes) if len(indexes) > 0 else 0
             index = str(index)
             self.tree.insert("", "end", text=index, values=(file, file.split(
-                ".")[-1], f"{round(file_stats.st_size / 1024, 2)} KB", "", "", ""))
+                ".")[-1], f"{round(file_stats.st_size / 1024, 2)} KB", "", folder, ""))  # Store folder path in the output path column
 
         self.label_length["text"] = f"{len(self.tree.get_children())} file/s in total"
         self.root.title("Characterize")
@@ -415,25 +415,32 @@ class App:
             self.flag_time = False
 
     def process(self):
-        def run_thread(command):
+        def run_thread(command, callback):
+            # Configure startupinfo to hide the subprocess window
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
+            
+            # Execute the command in a subprocess
             with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startupinfo) as process:
-                for line in iter(process.stdout.readline, ""):
+                for line in iter(process.stdout.readline, b""):
                     if not line:
                         break
                     line = line.decode('utf-8').strip()
                     for inf in line.split(">>"):
                         segments = inf.split("<<")
                         if len(segments) == 3:
-                            self.thread_queue.append(
-                                (segments[1], segments[2].replace("\\r\\n", "")))
+                            self.thread_queue.append((segments[1], segments[2].replace("\\r\\n", "")))
                         elif len(segments) == 4:
-                            self.thread_queue.append(
-                                (segments[1], segments[2], segments[3].replace("\\\\", "/").replace("\\r\\n", "")))
+                            self.thread_queue.append((segments[1], segments[2], segments[3].replace("\\\\", "/").replace("\\r\\n", "")))
                 process.wait()
-            self.thread_queue.append("enable")
+            
+            callback()
+        
+        def split_list(lst, chunk_size):
+            """Split a list into chunks of a given size."""
+            for i in range(0, len(lst), chunk_size):
+                yield lst[i:i + chunk_size]
 
         if not all(self.resolution_entry.get() and self.complexity_entry.get()):
             return False
@@ -449,18 +456,30 @@ class App:
             if not 1 <= value_b <= 40:
                 return False
 
-        files = [self.tree.item(line)['values'][0]
-                 for line in self.tree.get_children() if os.path.exists(self.tree.item(line)['values'][0])]
+        # Get folder paths if all files in the folder are added
+        folder_paths = set()
+        individual_files = []
 
-        if len(files) == 0:
-            return False
+        for line in self.tree.get_children():
+            output_path = self.tree.item(line)['values'][-1]
+            if output_path:
+                if os.path.isdir(output_path):
+                    # Check if all files in the directory are added
+                    if len([x for x in self.tree.get_children() if self.tree.item(x)['values'][-1] == output_path]) == len(return_recursive(output_path)):
+                        folder_paths.add(output_path)
+                    else:
+                        individual_files.append(self.tree.item(line)['values'][0])
+                else:
+                    # If it's a file, add it to individual_files
+                    individual_files.append(self.tree.item(line)['values'][0])
+            else:
+                individual_files.append(self.tree.item(line)['values'][0])
 
-        files_str = ''
-
-        for file in files:
-            files_str += f' "{file}"'
-
-        files_str = files_str.strip()
+        base_command = f"""{python} {os.path.join(os.path.realpath(os.path.dirname(__file__)), 'characterize.py')}"""
+        
+        # Adding folders
+        for folder in folder_paths:
+            base_command += f' --i "{folder}"'
 
         script = self.language_cb.get().strip()
         color = True if len(self.color_check.state()) > 0 else False
@@ -468,26 +487,48 @@ class App:
         optimize = True if len(self.optimize_check.state()) > 0 else False
         format = self.format_cb.get().strip()
 
-        command = f"""{python} {os.path.join(os.path.realpath(os.path.dirname(__file__)), 'characterize.py')} --i {files_str} --cr {value_a} --cl {value_b} --l {script} --c {color} --d {divide} --o {optimize} --f {format} --tk true"""
+        base_command += f' --cr {value_a} --cl {value_b} --l {script} --c {color} --d {divide} --o {optimize} --f {format} --tk true'
 
         self.cycle_buttons(True)
-
         self.label_generate["text"] = "Running engine..."
-
         self.flag = True
-
         self.root.title("Characterize")
-
         self.time = time.time()
         self.label_time["text"] = ""
         self.flag_time = True
 
         for line in self.tree.get_children():
-            self.tree.item(line, values=self.tree.item(line)[
-                'values'][:-3]+["", "", ""])
+            self.tree.item(line, values=self.tree.item(line)['values'][:-3] + ["", "", ""])
 
-        t = threading.Thread(target=run_thread, args=(command,), daemon=True)
-        t.start()
+        # Split individual files into chunks of 50
+        file_chunks = list(split_list(individual_files, 50))
+
+        # Track number of processed chunks
+        processed_chunks = [0]
+
+        def process_next_chunk(index):
+            if index < len(file_chunks):
+                files_str = ' '.join([f'"{file}"' for file in file_chunks[index]])
+                command = f'{base_command} --i {files_str}'
+                t = threading.Thread(target=run_thread, args=(command, lambda: on_chunk_complete(index + 1)), daemon=True)
+                t.start()
+            else:
+                # Re-enable buttons or perform other actions after all chunks are processed
+                self.cycle_buttons(False)
+                self.label_generate["text"] = f"Completed all {len(file_chunks)} chunks"
+
+        def on_chunk_complete(index):
+            processed_chunks[0] += 1
+            self.label_generate["text"] = f"Processing... {processed_chunks[0]} out of {len(file_chunks)} chunks completed"
+            if processed_chunks[0] >= len(file_chunks):
+                self.cycle_buttons(False)
+                self.label_generate["text"] = f"Completed all {len(file_chunks)} chunks"
+                self.thread_queue.append("enable")
+            else:
+                process_next_chunk(index)
+
+        process_next_chunk(0)
+
 
 
 if __name__ == "__main__":

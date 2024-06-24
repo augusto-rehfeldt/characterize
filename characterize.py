@@ -5,53 +5,23 @@ import os
 import sys
 import time
 import math
-import threading
 import pickle
 import subprocess
 
 import argparse
 import re
 
+import numpy as np
 
-python = sys.executable if not "python.exe" in os.listdir(
-) else os.path.join(os.path.realpath(os.path.dirname(__file__)), 'python.exe')
-
-try:
-    import numpy as np
-except ImportError:
-    subprocess.run(
-        f"{python} -m pip install numpy")
-    import numpy as np
-
-try:
-    import pathos.multiprocessing as mp
-except ImportError:
-    subprocess.run(
-        f"{python} -m pip install pathos")
-    import pathos.multiprocessing as mp
-finally:
-    from pathos.multiprocessing import cpu_count
-
-try:
-    from PIL import Image, ImageFont, ImageDraw, ImageEnhance
-except ImportError:
-    subprocess.run(
-        f"{python} -m pip install Pillow-SIMD")
-    from PIL import Image, ImageFont, ImageDraw, ImageEnhance
+from pathos.multiprocessing import cpu_count, ProcessingPool
+from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 
 
 characterize_path = os.path.realpath(os.path.dirname(__file__))
 
-
-def replace_many_one(string: str, lst: list, to_replace: str) -> str:
-    for item in lst:
-        string = string.replace(item, to_replace)
-    return string
-
-
 def divide_list(lst: list, n: int):
     """ Divides a list into n sublists. """
-    return [list(lst[i::n]) for i in range(n)]
+    return [lst[i::n] for i in range(n)]
 
 
 def amplify_differences(values, threshold):
@@ -64,7 +34,7 @@ def amplify_differences(values, threshold):
     return amplified_values
 
 
-def create_char_image(caracter, color, detail, font):
+def create_char_image(char, color, detail, font):
     # create a new image
     new_image = Image.new('RGBA', (detail, detail), color=(0, 0, 0, 255))
     # get the font
@@ -72,10 +42,17 @@ def create_char_image(caracter, color, detail, font):
     # draw the text
     draw = ImageDraw.Draw(new_image)
     draw.fontmode = "L"
-    draw.text(((detail)/2, (detail)/2), caracter, align='center', font=font,
+    draw.text(((detail)/2, (detail)/2), char, align='center', font=font,
               fill=color, anchor="mm")
     # return the new image
     return new_image
+
+
+def create_char_image_dict(characters, detail, font, color=False):
+    char_images = {}
+    for char in characters:
+        char_images[char] = create_char_image(char, (255, 255, 255, 255) if not color else (0, 0, 0, 0), detail, font)
+    return char_images
 
 
 def to_hours_minutes_seconds(seconds: float):
@@ -84,7 +61,7 @@ def to_hours_minutes_seconds(seconds: float):
     return "%dh:%02dm:%02ds" % (h, m, s)
 
 
-def get_chars(image, lista_caracteres, diccionario_imagenes_caracteres, formato, color):
+def get_chars(image, char_list, char_images, format, color):
     original_width, original_height = image.size
     pixels = image.convert("L").load()
     color_levels = [[pixels[i, j]/255 for j in range(
@@ -96,29 +73,25 @@ def get_chars(image, lista_caracteres, diccionario_imagenes_caracteres, formato,
         threshold = np.percentile(color_levels_list, 90)
     for i, x in enumerate(color_levels):
         color_levels[i] = list(map(lambda n: int(n * len(
-            lista_caracteres) - 0.5), amplify_differences(x, threshold) if not color else x))
+            char_list) - 0.5), amplify_differences(x, threshold) if not color else x))
     # create a list
-    caracteres = [[diccionario_imagenes_caracteres[lista_caracteres[y]] for y in color_int]
-                  for color_int in color_levels] if any(x in formato for x in ["png", "jpg"]) else []
-    caracteres_aux = np.fliplr(np.fliplr(np.array([[lista_caracteres[y] for y in color_int]
-                                                   for color_int in color_levels]).transpose())) if any(x in formato for x in ["txt"]) else []
+    characters = [[char_images[char_list[y]] for y in color_int]
+                  for color_int in color_levels] if any(x in format for x in ["png", "jpg"]) else []
+    characters_aux = np.fliplr(np.fliplr(np.array([[char_list[y] for y in color_int]
+                                                   for color_int in color_levels]).transpose())) if any(x in format for x in ["txt"]) else []
     # return the list
-    return caracteres, caracteres_aux
+    return characters, characters_aux
 
 
-def unite_image(caracteres, original_width, original_height, nivel_detalle_caracter):
-    # create a new image
-    new_image = Image.new(
-        'RGBA', (nivel_detalle_caracter * original_width, nivel_detalle_caracter * original_height))
-    # loop through the segments
+def unite_image(characters, original_width, original_height, detail_level):
+    new_image = Image.new('RGBA', (detail_level * original_width, detail_level * original_height), color=(0, 0, 0, 0))
+
     for i in range(original_width):
         for j in range(original_height):
-            # paste the segment on the new image
-            new_image.paste(caracteres[i][j],
-                            (i * nivel_detalle_caracter, j * nivel_detalle_caracter))
-    # return the new image
-    return new_image
+            char_image = characters[i][j].convert('RGBA')
+            new_image.paste(char_image, (i * detail_level, j * detail_level), char_image)
 
+    return new_image
 
 
 def divide_image(image, min_size):
@@ -141,7 +114,54 @@ def divide_image(image, min_size):
     return image_list
 
 
-def rutina(image, lista_caracteres, dict_imagenes_caracteres, detalle, dividir, formato, resize, color, folder_name, tkinter):
+def save_image(image, format, color, filename, max_attempts=10):
+    save_options = {
+        "png": {"format": "PNG", "compress_level": 9},
+        "jpg": {"format": "JPEG", "quality": 95}
+    }
+    
+    for fmt in ["png", "jpg"]:
+        if fmt in format:
+            attempt = 0
+            while attempt < max_attempts:
+                try:
+                    # Ensure the image is in RGB mode
+                    if image.mode != 'RGB':
+                        image = image.convert('RGB')
+                    
+                    # Apply color quantization if needed
+                    if color and fmt == "png":
+                        image = image.quantize(colors=256)
+                    
+                    # Save the image
+                    image.save(f"{filename}.{fmt}", **save_options[fmt])
+                    
+                    # Verify the saved image
+                    with Image.open(f"{filename}.{fmt}") as img:
+                        img.verify()
+
+                    break  # Exit the loop if successful
+                except Exception as e:
+                    attempt += 1
+                    if attempt < max_attempts:
+                        time.sleep(1)  # Wait a bit before retrying
+                    else:
+                        # If all attempts fail, try to save as a different format
+                        try:
+                            backup_format = "jpg" if fmt == "png" else "png"
+                            image.save(f"{filename}_backup.{backup_format}", **save_options[backup_format])
+                            print(f"Saved backup as {filename}_backup.{backup_format}")
+                        except Exception as backup_e:
+                            print(f"Failed to save backup: {str(backup_e)}")
+            
+
+
+def save_text(characters, filename):
+    with open(filename, "w") as f:
+        f.writelines([' '.join(line) + '\n' for line in characters])
+
+
+def rutina(image, char_list, char_images, detail, divide, format, resize, color, folder_name, tkinter):
     t_image = time.time()
     image_name = "".join([x for x in image])
 
@@ -156,10 +176,10 @@ def rutina(image, lista_caracteres, dict_imagenes_caracteres, detalle, dividir, 
         # Resize the image if needed
         if resize[0]:
             factor_resize = max(image.size[0]/resize[1][0], image.size[1]/resize[1][1])
-            image = image.resize((int(image.size[0]/factor_resize), int(image.size[1]/factor_resize)), resample=Image.Resampling.BOX)
+            image = image.resize((int(image.size[0]/factor_resize), int(image.size[1]/factor_resize)), resample=Image.Resampling.LANCZOS)
         
         # If the image is too big, divide it into smaller parts
-        if dividir:
+        if divide:
             image_list = divide_image(image, 408960)
         else:
             image_list = [image]
@@ -170,48 +190,49 @@ def rutina(image, lista_caracteres, dict_imagenes_caracteres, detalle, dividir, 
     # Process each divided image or the whole image
     for im in image_list:
         im = ImageEnhance.Color(im).enhance(2)
-        caracteres_imagen = get_chars(im, lista_caracteres, dict_imagenes_caracteres, formato, color=color)
+        characters_imagen = get_chars(im, char_list, char_images, format, color=color)
 
         # If saving as text
-        if "txt" in formato:
+        if "txt" in format:
             image_name = image_name.replace("\\", "/")
             filename = os.path.join(os.path.join(characterize_path, folder_name), ''.join(image_name.split('/')[-1].split('.')[:-1]) + '.txt')
-            with open(filename, "w") as f:
-                f.writelines([' '.join(line) + '\n' for line in caracteres_imagen[1]])
+            save_text(characters_imagen[1], filename)
             if tkinter:
                 print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
 
         # If saving as image
-        if any(ext in formato for ext in ["png", "jpg"]):
-            imagen_final = unite_image(caracteres_imagen[0], im.width, im.height, detalle)
-            im = im.resize((im.width * detalle, im.height * detalle), resample=Image.Resampling.BOX)
+        if any(ext in format for ext in ["png", "jpg"]):
+            imagen_final = unite_image(characters_imagen[0], im.width, im.height, detail)
+            im = im.resize((im.width * detail, im.height * detail), resample=Image.Resampling.BOX)
             bg_w, bg_h = im.size
             img_w, img_h = imagen_final.size
             offset = ((bg_w - img_w) // 2, (bg_h - img_h) // 2)
-            im.paste(imagen_final, offset, imagen_final)
-            im = im.convert("RGB")
             
-            # Save the image
-            def save_image(image, formato, color, filename):
-                if "png" in formato:
-                    if color:
-                        image = image.quantize(colors=256)
-                    image.save(filename + ".png", compress_level=9)
-                if "jpg" in formato:
-                    if color:
-                        image = image.quantize(colors=256)
-                    image.save(filename + ".jpg")
+            # Convert both images to RGBA mode before pasting
+            im = im.convert("RGBA")
+            imagen_final = imagen_final.convert("RGBA")
+            
+            # Create a new blank image with the same size as 'im'
+            combined = Image.new("RGBA", im.size, (0, 0, 0, 0))
+            
+            # Paste 'im' onto the new image
+            combined.paste(im, (0, 0))
+            
+            # Paste 'imagen_final' onto the new image
+            combined.paste(imagen_final, offset, imagen_final)
+            
+            # Convert back to RGB for saving
+            combined = combined.convert("RGB")
 
+            # Save the image
             image_name = image_name.replace("\\", "/")
             filename = os.path.join(os.path.join(characterize_path, folder_name), ''.join(image_name.split('/')[-1].split('.')[:-1]))
 
-            if tkinter:
-                print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in formato else filename+'.jpg'}>>")
-
             # Start the thread for saving the image
-            thread = threading.Thread(target=save_image, args=(im, formato, color, filename), daemon=True)
-            thread.start()
-            thread.join()
+            save_image(combined, format, color, filename)
+            
+            if tkinter:
+                print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in format else filename+'.jpg'}>>")
 
             return filename
 
@@ -444,26 +465,13 @@ if __name__ == "__main__":
     t4 = time.time()
 
     if any(x in formato_final for x in ["jpg", "png"]):
-        if not f"dict_caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-color' if color else ''}.dictionary" in os.listdir(os.path.join(characterize_path, "dict_caracteres")):
-            print(
-                "Creating a dictionary containing the characters to accelerate the script's execution in the future...")
-            diccionario_caracteres = {}
-            for i in lista_caracteres:
-                diccionario_caracteres[i] = create_char_image(
-                    i, (255, 255, 255, 255) if not color else (0, 0, 0, 0), nivel_detalle_caracter, font=fuente)
-            pickle.dump(diccionario_caracteres, open(os.path.join(
-                characterize_path, f"dict_caracteres/dict_caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-color' if color else ''}.dictionary"), 'wb'))
-            print(
-                f"Characters dict created in {round(time.time()-t4, 2)} seconds.\n")
-        else:
-            diccionario_caracteres = pickle.load(open(os.path.join(
-                characterize_path, f"dict_caracteres/dict_caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-color' if color else ''}.dictionary"), 'rb'))
-            print(
-                f"Characters dict loaded in {to_hours_minutes_seconds(time.time() -  t4)}.\n")
+        char_images = create_char_image_dict(lista_caracteres, nivel_detalle_caracter, fuente, color)
+        print(
+            f"Characters dict created in {round(time.time()-t4, 2)} seconds.\n")
     else:
-        diccionario_caracteres = False
+        char_images = False
 
-    t = cpu_count() if cpu_count() >= 2 else 1
+    t = cpu_count()//2 if cpu_count() >= 2 else 1
     num_iterations = len(lista_imagenes)
 
     if len(lista_caracteres) <= 30:
@@ -477,8 +485,8 @@ if __name__ == "__main__":
         t_interno = time.time()
         results = []
         for i, image in enumerate(lista_imagenes):
-            results.append(rutina(image, lista_caracteres, diccionario_caracteres,
-                                  nivel_detalle_caracter, dividir=dividir_imagen, formato=formato_final, resize=resize, color=color, folder_name=folder_name, tkinter=tkinter))
+            results.append(rutina(image, lista_caracteres, char_images,
+                      nivel_detalle_caracter, dividir_imagen, formato_final, resize, color, folder_name, tkinter))
         if not tkinter:
             print(
                 f"Elapsed time: {to_hours_minutes_seconds(time.time()-t_interno)}")
@@ -492,16 +500,16 @@ if __name__ == "__main__":
         m = 0
         n = t
 
-        pool = mp.ProcessingPool(t)
+        pool = ProcessingPool(t)
 
         while num_iterations > 0:
             t_interno = time.time()
             iterations = t
             if num_iterations < t:
                 iterations = num_iterations
-                pool = mp.ProcessingPool(iterations)
+                pool = ProcessingPool(iterations)
             value_range = [m+k for k in range(iterations)]
-            results += pool.imap(rutina, [lista_imagenes[k] for k in value_range], [lista_caracteres for _ in value_range], [diccionario_caracteres for _ in value_range],
+            results += pool.imap(rutina, [lista_imagenes[k] for k in value_range], [lista_caracteres for _ in value_range], [char_images for _ in value_range],
                                  [nivel_detalle_caracter for _ in value_range], [dividir_imagen for _ in value_range], [formato_final for _ in value_range], [resize for _ in value_range], [color for _ in value_range], [folder_name for _ in value_range], [tkinter for _ in value_range])
             num_iterations -= iterations
             l += 1
@@ -510,8 +518,8 @@ if __name__ == "__main__":
             if not tkinter:
                 print(f"   {l}/{cycles} - Total execution time: {to_hours_minutes_seconds(round((time.time() - t0), 2))} ({to_hours_minutes_seconds(time.time() - t_interno)}) / {to_hours_minutes_seconds(round((time.time() - t_interno) * (cycles-l), 2))} remaining     ", end="\r")
 
-    formato_final = [replace_many_one(x, [",", ".", ";"], "")
-                     for x in [y for y in formato_final.split() if any(z in y for z in ["png", "jpg", "txt"])]]
+    formato_final = [x.replace(",", "").replace(".", "").replace(";", "")
+                     for x in formato_final.split() if any(z in x for z in ["png", "jpg", "txt"])]
 
     results = [item for sublist in [
         [r+f".{f}" for r in results] for f in formato_final] for item in sublist]
