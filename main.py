@@ -199,9 +199,16 @@ class App:
             "ascii", "arabic", "braille", "chinese", "cyrillic", "emoji", "hangul", "hiragana", "katakana", "kanji", "latin", "numbers", "numbers+", "roman", "simple"])
         self.language_cb.set(self.language_cb["values"][0])
         self.language_cb.grid(row="0", column="1", pady=(0, 5), ipady=2)
+        
+        # Add the new checkbox for empty character
+        self.empty_char_check = ttk.Checkbutton(master, text="Add empty character")
+        self.empty_char_check.state(['!alternate'])
+        self.empty_char_check.grid(row="0", column="2", sticky="W")
+        
+        # Move the help button to the next column
         self.language_help = ttk.Button(
             master, text="Help", width=6, command=self.help_1)
-        self.language_help.grid(row="0", column="2", sticky="NW")
+        self.language_help.grid(row="0", column="3", sticky="NW")
 
         self.label_resolution = ttk.Label(master, text="Resolution")
         self.label_resolution.grid(row="1", column="0", sticky="W",)
@@ -485,9 +492,10 @@ class App:
         color = True if len(self.color_check.state()) > 0 else False
         divide = True if len(self.divide_check.state()) > 0 else False
         optimize = True if len(self.optimize_check.state()) > 0 else False
+        empty_char = True if len(self.empty_char_check.state()) > 0 else False
         format = self.format_cb.get().strip()
 
-        base_command += f' --cr {value_a} --cl {value_b} --l {script} --c {color} --d {divide} --o {optimize} --f {format} --tk true'
+        base_command += f' --cr {value_a} --cl {value_b} --l {script} --c {color} --d {divide} --o {optimize} --f {format} --ec {empty_char} --tk true'
 
         self.cycle_buttons(True)
         self.label_generate["text"] = "Running engine..."
