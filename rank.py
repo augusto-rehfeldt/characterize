@@ -13,15 +13,23 @@ python = (
 try:
     import numpy as np
 except ImportError:
-    subprocess.run(f"{python} -m pip install numpy")
+    import shlex
+    import subprocess
+    
+    python = "python3"
+    subprocess.run([python, "-m", "pip", "install", "numpy"])
     import numpy as np
 
 try:
     from PIL import Image, ImageFont, ImageDraw
 except ImportError:
-    subprocess.run(f"{python} -m pip install Pillow")
+    import subprocess
+    
+    subprocess.run([python, "-m", "pip", "install", "Pillow"])
     from PIL import Image, ImageFont, ImageDraw
 
+
+import subprocess
 
 def diss_index(characters):
     if isinstance(characters[0], tuple):
@@ -34,7 +42,7 @@ def diss_index(characters):
         try:
             median_step_size = np.median(step_sizes)
         except AttributeError:
-            subprocess.run(f"{python} -m pip install --upgrade numpy", shell=True)
+            subprocess.run(f&quot;{python} -m pip install --upgrade numpy&quot;, shell=False)
             median_step_size = np.median(step_sizes)
         dissimilarity_index = round(
             median_step_size / (max_color_level - min_color_level), 3
@@ -50,7 +58,7 @@ def diss_index(characters):
         try:
             median_step_size = np.median(step_sizes)
         except AttributeError:
-            subprocess.run(f"{python} -m pip install --upgrade numpy", shell=True)
+            subprocess.run(f&quot;{python} -m pip install --upgrade numpy&quot;, shell=False)
             median_step_size = np.median(step_sizes)
         dissimilarity_index = round(
             median_step_size / (max_color_level - min_color_level), 3
