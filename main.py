@@ -10,16 +10,25 @@ python = sys.executable if not "python.exe" in os.listdir(
 try:
     import copy
 except ImportError:
-    subprocess.run(
-        f"{python} -m pip install copy")
+    import shlex
+    import subprocess
+    
+    subprocess.run([
+        shlex.quote(python),
+        '-m',
+        'pip',
+        'install',
+        'copy'
+    ])
     import copy
 
 try:
     import tkinter as tk
     import tkinter.ttk as ttk
 except ImportError:
-    subprocess.run(
-        f"{python} -m pip install tkinter")
+    import subprocess
+    
+    subprocess.run([python, '-m', 'pip', 'install', 'tkinter'])
     import tkinter as tk
     import tkinter.ttk as ttk
 finally:
@@ -122,8 +131,8 @@ class App:
         else:
             path_to_open = self.tree.item(item)["values"][-1]
             if path_to_open:
-                os.startfile(path_to_open.replace(
-                    "\\\\", "/").strip())
+                sanitized_path = path_to_open.replace("\\", "/").strip()
+                os.startfile(sanitized_path)
 
     def place_tree(self, master: ttk.Frame):
         try:
@@ -429,7 +438,7 @@ class App:
             startupinfo.wShowWindow = subprocess.SW_HIDE
             
             # Execute the command in a subprocess
-            with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startupinfo) as process:
+            with subprocess.Popen(command, shell=False, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startupinfo) as process:
                 for line in iter(process.stdout.readline, b""):
                     if not line:
                         break
