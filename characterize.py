@@ -649,15 +649,16 @@ if __name__ == "__main__":
         lista_caracteres = [x[0] for x in lista_caracteres_original]
         print(f"Characters list created in {round(time.time()-t3, 2)} seconds.\n")
     else:
-        lista_caracteres_original = pickle.load(
-            open(
-                os.path.join(
-                    characterize_path,
-                    f"dict_caracteres/caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-empty' if empty_char else ''}.list",
-                ),
-                "rb",
-            )
-        )
+        import json
+        
+        with open(
+            os.path.join(
+                characterize_path,
+                f"dict_caracteres/caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}" + ('-empty' if empty_char else '') + ".json"
+            ),
+            "r",
+        ) as file:
+            lista_caracteres_original = json.load(file)
         lista_caracteres = [x[0] for x in lista_caracteres_original]
         print(
             "\n"
@@ -769,9 +770,11 @@ if __name__ == "__main__":
                         .replace(", ", " ")[1:-1]
                         .replace("'", "")
                     )
+                    import subprocess
+                    
                     subprocess.Popen(
                         f"C:/Program^ Files/FileOptimizer/FileOptimizer64.exe {divided_str}",
-                        shell=True,
+                        shell=False,
                     )
             else:
                 paths = divide_list(results, len(results))
@@ -783,7 +786,7 @@ if __name__ == "__main__":
                     )
                     subprocess.Popen(
                         f"C:/Program^ Files/FileOptimizer/FileOptimizer64.exe {divided_str}",
-                        shell=True,
+                        shell=False,
                     )
     else:
         print("\nBypassing file optimization...")
