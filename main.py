@@ -100,15 +100,18 @@ class App:
         self.frame_generate.grid(
             row="0", column="1", pady=(30, 0), sticky="NW",)
 
-        self.place_tree(self.frame_tree)
-        self.place_buttons(self.frame_buttons)
-        self.place_options(self.frame_options)
-        self.place_generate(self.frame_generate)
+        self.create_widgets()
 
         self.root.after(
             500, self.listen_for_result)
 
         self.flag = False
+
+    def create_widgets(self):
+        self.place_tree(self.frame_tree)
+        self.place_buttons(self.frame_buttons)
+        self.place_options(self.frame_options)
+        self.place_generate(self.frame_generate)
 
     def help_1(self):
         message = """- languages with lower range values and higher max values are better for black & white images,\n- languages with higher starting values and lower range are better for colour images.\n- the third item represents the dissimilarity index between characters for a default 12 characters list. A value of 0 indicates that the characters on the list have similar brightness levels, while a value of 1 indicates that the characters on the list have very dissimilar brightness levels. A higher dissimilarity index is better.\n\nascii: Brightness range: 79; min and max: (2, 81); dissimility: 0.087.\narabic: Brightness range: 21; min and max: (8, 29); dissimility: 0.094.\nbraille: Brightness range: 15; min and max: (3, 18); dissimility: 0.005.\nchinese: Brightness range: 107; min and max: (0, 107); dissimility: 0.091.\ncyrillic: Brightness range: 52; min and max: (18, 70); dissimility: 0.092.\nemoji: Brightness range: 142; min and max: (31, 173); dissimility: 0.093.\nhangul: Brightness range: 58; min and max: (28, 86); dissimility: 0.091.\nhiragana: Brightness range: 29; min and max: (17, 46); dissimility: 0.103.\nkatakana: Brightness range: 24; min and max: (15, 39); dissimility: 0.092.\nkanji: Brightness range: 86; min and max: (8, 94); dissimility: 0.092.\nlatin: Brightness range: 48; min and max: (15, 63); dissimility: 0.091.\nnumbers: Brightness range: 22; min and max: (21, 43); dissimility: 0.063.\nnumbers+: Brightness range: 48; min and max: (15, 63); dissimility: 0.085.\nroman: Brightness range: 54; min and max: (27, 81); dissimility: 0.103.\nsimple: Brightness range: 79; min and max: (2, 81); dissimility: 0.046."""
@@ -253,6 +256,31 @@ class App:
         self.optimize_check = ttk.Checkbutton(master)
         self.optimize_check.state(['!alternate'])
         self.optimize_check.grid(row="6", column="1")
+
+        # Add tooltips for better user experience
+        self.add_tooltip(self.language_cb, "Select the character set to use")
+        self.add_tooltip(self.empty_char_check, "Use an empty character for the darkest pixels")
+        self.add_tooltip(self.resolution_entry, "Set the width of the output in characters")
+        self.add_tooltip(self.complexity_entry, "Set the number of unique characters to use")
+        self.add_tooltip(self.format_cb, "Choose the output file format(s)")
+        self.add_tooltip(self.color_check, "Enable color output")
+        self.add_tooltip(self.divide_check, "Subdivide large images for processing")
+        self.add_tooltip(self.optimize_check, "Optimize output files (if <=300 files)")
+
+    def add_tooltip(self, widget, text):
+        tooltip = tk.Label(widget.master, text=text, background="#ffffe0", relief="solid", borderwidth=1)
+        tooltip.pack_forget()
+
+        def enter(event):
+            tooltip.lift(widget)
+            tooltip.place(x=widget.winfo_rootx() - widget.winfo_x(), 
+                          y=widget.winfo_rooty() - widget.winfo_y() + widget.winfo_height())
+
+        def leave(event):
+            tooltip.place_forget()
+
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)
 
     def place_generate(self, master: ttk.Frame):
         try:

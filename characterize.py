@@ -7,6 +7,7 @@ import time
 import math
 import pickle
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 import argparse
 import re
@@ -288,6 +289,12 @@ def rutina(
             # Convert back to RGB for saving
             combined = combined.convert("RGB")
 
+            # Optimize the image before saving
+            if color:
+                combined = combined.quantize(colors=256)
+            else:
+                combined = combined.convert("L")
+
             # Save the image
             image_name = image_name.replace("\\", "/")
             filename = os.path.join(
@@ -475,6 +482,22 @@ def parse_arguments():
     tk = args.tk
 
     return l, cl, c, input_files, cr, ec, d, f, o, tk
+
+
+def divide_list(lst, n):
+    """Divide a list into n approximately equal parts."""
+    k, m = divmod(len(lst), n)
+    return [lst[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
+
+
+def optimize_file(file_path):
+    cmd = f'"C:/Program Files/FileOptimizer/FileOptimizer64.exe" "{file_path}"'
+    subprocess.run(cmd, shell=True, check=True)
+
+
+def optimize_files(files, num_threads):
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        executor.map(optimize_file, files)
 
 
 if __name__ == "__main__":
@@ -761,30 +784,10 @@ if __name__ == "__main__":
     if optimize and len(results) <= 300:
         if os.path.exists("C:/Program Files/FileOptimizer/FileOptimizer64.exe"):
             print("\n\nOptimizing files in the background...")
-            if len(results) >= t // 2:
-                paths = divide_list(results, t // 2)
-                for divided in paths:
-                    divided_str = (
-                        str([f'"{x}"' for x in divided])
-                        .replace(", ", " ")[1:-1]
-                        .replace("'", "")
-                    )
-                    subprocess.Popen(
-                        f"C:/Program^ Files/FileOptimizer/FileOptimizer64.exe {divided_str}",
-                        shell=True,
-                    )
-            else:
-                paths = divide_list(results, len(results))
-                for divided in paths:
-                    divided_str = (
-                        str([f'"{x}"' for x in divided])
-                        .replace(", ", " ")[1:-1]
-                        .replace("'", "")
-                    )
-                    subprocess.Popen(
-                        f"C:/Program^ Files/FileOptimizer/FileOptimizer64.exe {divided_str}",
-                        shell=True,
-                    )
+            optimize_files(results, t)
+            print("File optimization completed.")
+        else:
+            print("\nFileOptimizer not found. Skipping optimization...")
     else:
         print("\nBypassing file optimization...")
 
