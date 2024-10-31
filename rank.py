@@ -1,69 +1,40 @@
 import math
 import sys
-import os
 import subprocess
+import importlib
 
+def install_and_import(package):
+    try:
+        return importlib.import_module(package)
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", package], check=True)
+        return importlib.import_module(package)
 
-python = (
-    sys.executable
-    if not "python.exe" in os.listdir()
-    else os.path.join(os.path.realpath(os.path.dirname(__file__)), "python.exe")
-)
-
-try:
-    import numpy as np
-except ImportError:
-    subprocess.run(f"{python} -m pip install numpy")
-    import numpy as np
-
-try:
-    from PIL import Image, ImageFont, ImageDraw
-except ImportError:
-    subprocess.run(f"{python} -m pip install Pillow")
-    from PIL import Image, ImageFont, ImageDraw
-
+np = install_and_import('numpy')
+PIL = install_and_import('PIL.Image')
+from PIL import Image, ImageFont, ImageDraw
 
 def diss_index(characters):
     if isinstance(characters[0], tuple):
-        min_color_level = characters[0][1]
-        max_color_level = characters[-1][1]
-        step_sizes = [
-            abs(color1 - color2)
-            for (_, color1), (_, color2) in zip(characters[:-1], characters[1:])
-        ]
-        try:
-            median_step_size = np.median(step_sizes)
-        except AttributeError:
-            subprocess.run(f"{python} -m pip install --upgrade numpy", shell=True)
-            median_step_size = np.median(step_sizes)
-        dissimilarity_index = round(
-            median_step_size / (max_color_level - min_color_level), 3
-        )
-        return dissimilarity_index
+        colors = [color for _, color in characters]
     else:
-        min_color_level = characters[0]
-        max_color_level = characters[-1]
-        step_sizes = [
-            abs(color1 - color2)
-            for color1, color2 in zip(characters[:-1], characters[1:])
-        ]
-        try:
-            median_step_size = np.median(step_sizes)
-        except AttributeError:
-            subprocess.run(f"{python} -m pip install --upgrade numpy", shell=True)
-            median_step_size = np.median(step_sizes)
-        dissimilarity_index = round(
-            median_step_size / (max_color_level - min_color_level), 3
-        )
-        return dissimilarity_index
-
+        colors = characters
+    min_color_level = colors[0]
+    max_color_level = colors[-1]
+    step_sizes = [abs(c1 - c2) for c1, c2 in zip(colors[:-1], colors[1:])]
+    try:
+        median_step_size = np.median(step_sizes)
+    except AttributeError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "numpy"], check=True)
+        median_step_size = np.median(step_sizes)
+    dissimilarity_index = round(median_step_size / (max_color_level - min_color_level), 3)
+    return dissimilarity_index
 
 def decimal_range(start, stop, length):
     color_range = stop - start
     step_size = math.ceil(color_range / length)
     values = [start + step_size * x for x in range(0, length)]
     return values
-
 
 def char_image_colors(character, detail, font):
     # create a new image

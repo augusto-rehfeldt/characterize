@@ -7,14 +7,13 @@ import time
 import math
 import pickle
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 import argparse
 import re
 
 import numpy as np
 
-from pathos.multiprocessing import cpu_count, ProcessingPool
 from PIL import Image, ImageFont, ImageDraw, ImageEnhance
 
 
@@ -383,102 +382,35 @@ def input_files(text=True):
 
 
 def parse_arguments():
-    l = cl = input_files = f = tk = ec = False
-    c = d = o = cr = (False, False)
-    
+    # Simplify boolean argument parsing
+    def str_to_bool(value):
+        return value.lower() in ['true', 't', 'yes', 'y']
+
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "-i",
-        "--i",
-        type=str,
-        nargs="*",
-        help='input file paths MANY ["path1", "path2", ...]',
-    )
-    parser.add_argument(
-        "-cr", "--cr", type=int, help="character resolution parameter ONE (1 to 4000)"
-    )
-    parser.add_argument(
-        "-cl", "--cl", type=int, help="complexity level parameter ONE (1 to 4000)"
-    )
-    parser.add_argument(
-        "-l", "--l", type=str, help="language parameter ONE [ascii, chinese, ...]"
-    )
+    parser.add_argument("-i", "--i", type=str, nargs="*", help='input file paths MANY ["path1", "path2", ...]')
+    parser.add_argument("-cr", "--cr", type=int, help="character resolution parameter ONE (1 to 4000)")
+    parser.add_argument("-cl", "--cl", type=int, help="complexity level parameter ONE (1 to 4000)")
+    parser.add_argument("-l", "--l", type=str, help="language parameter ONE [ascii, chinese, ...]")
     parser.add_argument("-d", "--d", type=str, help="divide parameter ONE (true/false)")
     parser.add_argument("-c", "--c", type=str, help="color parameter ONE (true/false)")
-    parser.add_argument(
-        "-f", "--f", nargs="+", help="format parameter MANY [png, jpg, txt]"
-    )
-    parser.add_argument(
-        "-o", "--o", type=str, help="optimize parameter ONE (true/false)"
-    )
-    parser.add_argument(
-        "-ec", "--ec", type=str, help="empty character parameter ONE (true/false)"
-    )
-    parser.add_argument(
-        "-tk", "--tk", type=bool, help="tkinter parameter ONE (true/false)"
-    )
+    parser.add_argument("-f", "--f", nargs="+", help="format parameter MANY [png, jpg, txt]")
+    parser.add_argument("-o", "--o", type=str, help="optimize parameter ONE (true/false)")
+    parser.add_argument("-ec", "--ec", type=str, help="empty character parameter ONE (true/false)")
+    parser.add_argument("-tk", "--tk", type=lambda x: str_to_bool(x), help="tkinter parameter ONE (true/false)")
     args = parser.parse_args()
 
     input_files = args.i
     cr = (True, (args.cr, args.cr)) if isinstance(args.cr, int) else (False, False)
     cl = args.cl
     l = args.l
-    
-    if args.ec is not None:
-        ec = (
-            (True, True)
-            if any(x == args.ec.lower() for x in ["true", "t", "yes", "y"])
-            else (
-                (True, False)
-                if any(x == args.ec.lower() for x in ["false", "f", "no", "n"])
-                else (False, False)
-            )
-        )
-    else:
-        ec = (False, False)
 
-    if args.d is not None:
-        d = (
-            (True, True)
-            if any(x == args.d.lower() for x in ["true", "t", "yes", "y"])
-            else (
-                (True, False)
-                if any(x == args.d.lower() for x in ["false", "f", "no", "n"])
-                else (False, False)
-            )
-        )
-    else:
-        d = (False, False)
+    ec = (True, str_to_bool(args.ec)) if args.ec else (False, False)
+    d = (True, str_to_bool(args.d)) if args.d else (False, False)
+    c = (True, str_to_bool(args.c)) if args.c else (False, False)
+    f = " ".join(args.f) if args.f else None
+    o = (True, str_to_bool(args.o)) if args.o else (False, False)
 
-    if args.c is not None:
-        c = (
-            (True, True)
-            if any(x == args.c.lower() for x in ["true", "t", "yes", "y"])
-            else (
-                (True, False)
-                if any(x == args.c.lower() for x in ["false", "f", "no", "n"])
-                else (False, False)
-            )
-        )
-    else:
-        c = (False, False)
-
-    f = " ".join(args.f) if args.f is not None else None
-
-    if args.o is not None:
-        o = (
-            (True, True)
-            if any(x == args.o.lower() for x in ["true", "t", "yes", "y"])
-            else (
-                (True, False)
-                if any(x == args.o.lower() for x in ["false", "f", "no", "n"])
-                else (False, False)
-            )
-        )
-    else:
-        o = (False, False)
-        
     tk = args.tk
 
     return l, cl, c, input_files, cr, ec, d, f, o, tk
@@ -498,6 +430,21 @@ def optimize_file(file_path):
 def optimize_files(files, num_threads):
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         executor.map(optimize_file, files)
+
+
+def process_image(image, lista_caracteres, char_images, nivel_detalle_caracter, dividir_imagen, formato_final, resize, color, folder_name, tkinter):
+    return rutina(
+        image,
+        lista_caracteres,
+        char_images,
+        nivel_detalle_caracter,
+        dividir_imagen,
+        formato_final,
+        resize,
+        color,
+        folder_name,
+        tkinter,
+    )
 
 
 if __name__ == "__main__":
@@ -694,7 +641,7 @@ if __name__ == "__main__":
         print(f"Characters dict created in {round(time.time()-t4, 2)} seconds.\n")
     else:
         char_images = False
-    t = cpu_count() // 2 if cpu_count() >= 2 else 1
+    t = os.cpu_count() // 2 if os.cpu_count() >= 2 else 1
     num_iterations = len(lista_imagenes)
     if len(lista_caracteres) <= 30:
         print("Characters to use:", lista_caracteres_original, "\n")
@@ -726,48 +673,30 @@ if __name__ == "__main__":
         if not tkinter:
             print(f"Elapsed time: {to_hours_minutes_seconds(time.time()-t_interno)}")
     else:
-        t = t if t <= num_iterations else num_iterations
         results = []
-
-        cycles = math.ceil(num_iterations / t)
-
-        l = 0
-        m = 0
-        n = t
-
-        pool = ProcessingPool(t)
-
-        while num_iterations > 0:
-            t_interno = time.time()
-            iterations = t
-            if num_iterations < t:
-                iterations = num_iterations
-                pool = ProcessingPool(iterations)
-            value_range = [m + k for k in range(iterations)]
-            results += pool.imap(
-                rutina,
-                [lista_imagenes[k] for k in value_range],
-                [lista_caracteres for _ in value_range],
-                [char_images for _ in value_range],
-                [nivel_detalle_caracter for _ in value_range],
-                [dividir_imagen for _ in value_range],
-                [formato_final for _ in value_range],
-                [resize for _ in value_range],
-                [color for _ in value_range],
-                [folder_name for _ in value_range],
-                [tkinter for _ in value_range],
-            )
-            num_iterations -= iterations
-            l += 1
-            m += iterations
-            n += iterations
+        with ProcessPoolExecutor(max_workers=t) as executor:
+            futures = [
+                executor.submit(
+                    process_image,
+                    lista_imagenes[i],
+                    lista_caracteres,
+                    char_images,
+                    nivel_detalle_caracter,
+                    dividir_imagen,
+                    formato_final,
+                    resize,
+                    color,
+                    folder_name,
+                    tkinter,
+                )
+                for i in range(num_iterations)
+            ]
+            for future in futures:
+                results.append(future.result())
             if not tkinter:
                 print(
-                    f"   {l}/{cycles} - Total execution time: {to_hours_minutes_seconds(round((time.time() - t0), 2))} ({to_hours_minutes_seconds(time.time() - t_interno)}) / {to_hours_minutes_seconds(round((time.time() - t_interno) * (cycles-l), 2))} remaining     ",
-                    end="\r",
+                    f"Total execution time: {to_hours_minutes_seconds(round((time.time() - t0), 2))}"
                 )
-                
-        print()
 
     formato_final = [
         x.replace(",", "").replace(".", "").replace(";", "")

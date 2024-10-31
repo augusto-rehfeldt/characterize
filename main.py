@@ -3,6 +3,7 @@ import sys
 import subprocess
 import threading
 import time
+import copy
 
 python = sys.executable if not "python.exe" in os.listdir(
 ) else os.path.join(os.path.realpath(os.path.dirname(__file__)), 'python.exe')
@@ -410,7 +411,7 @@ class App:
         """ Check if there is something in the queue. """
         queue = copy.deepcopy(self.thread_queue)
         self.thread_queue = []
-        if len(queue) > 0:
+        if queue:
             queue = sorted(queue, key=lambda x: len(x))
             if self.flag:
                 self.label_generate["text"] = "Processing images..."
@@ -451,12 +452,10 @@ class App:
 
     def process(self):
         def run_thread(command, callback):
-            # Configure startupinfo to hide the subprocess window
             startupinfo = subprocess.STARTUPINFO()
             startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             startupinfo.wShowWindow = subprocess.SW_HIDE
-            
-            # Execute the command in a subprocess
+
             with subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL, startupinfo=startupinfo) as process:
                 for line in iter(process.stdout.readline, b""):
                     if not line:
@@ -469,9 +468,9 @@ class App:
                         elif len(segments) == 4:
                             self.thread_queue.append((segments[1], segments[2], segments[3].replace("\\\\", "/").replace("\\r\\n", "")))
                 process.wait()
-            
+
             callback()
-        
+
         def split_list(lst, chunk_size):
             """Split a list into chunks of a given size."""
             for i in range(0, len(lst), chunk_size):
