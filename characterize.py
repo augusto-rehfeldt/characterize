@@ -531,108 +531,85 @@ if __name__ == "__main__":
     if not any(x in formato_final for x in ("png", "jpg", "txt")):
         formato_final = "png"
 
-    lista_imagenes = []
+    image_list = []
+    valid_extensions = {'.jpg', '.jpeg', '.png', '.jfif', '.webp'}
 
     for path in image_src:
         path = path.strip()
         if os.path.isdir(path):
-            for image_path in [
-                path + "/" + x
-                for x in os.listdir(path)
-                if any(
-                    x.lower().endswith(y)
-                    for y in [".jpg", ".jpeg", ".png", ".jfif", ".webp"]
-                )
-            ]:
-                lista_imagenes.append(image_path)
+            for filename in os.listdir(path):
+                if any(filename.lower().endswith(ext) for ext in valid_extensions):
+                    image_list.append(os.path.join(path, filename))
         else:
-            if any(
-                path.endswith(y) for y in [".jpg", ".jpeg", ".png", ".jfif", ".webp"]
-            ):
-                lista_imagenes.append(path)
+            if any(path.lower().endswith(ext) for ext in valid_extensions):
+                image_list.append(path)
 
-    if len(lista_imagenes) == 0:
+    if not image_list:
         print("No images provided. Closing...")
         sys.exit()
 
-    nivel_detalle_caracter = (
-        15
-        if idioma in ["hiragana", "katakana", "kanji", "chinese", "hangul", "arabic"]
-        else (16 if idioma == "braille" else 12)
-    )
+    # Determine character detail level based on language
+    detail_level = {
+        "braille": 16,
+        "hiragana": 15, "katakana": 15, "kanji": 15,
+        "chinese": 15, "hangul": 15, "arabic": 15
+    }.get(idioma, 12)
 
-    dict_caracteres = characters.dict_caracteres
+    char_dict = characters.dict_caracteres
 
-    try:
-        font = ImageFont.truetype(fuentes[idioma], 10)
-    except OSError:
+    # Font paths to try
+    font_paths = [
+        fuentes[idioma],
+        os.path.join(os.environ.get('LOCALAPPDATA', ''), 
+                    'Microsoft/Windows/Fonts', fuentes[idioma])
+    ]
+
+    font = None
+    for font_path in font_paths:
         try:
-            font = ImageFont.truetype(
-                "C:/Users/Augusto/Appdata/local/microsoft/windows/fonts/"
-                + fuentes[idioma],
-                10,
-            )
+            font = ImageFont.truetype(font_path, 10)
+            font_file = font_path
+            break
         except OSError:
-            print(
-                f"{fuentes[idioma]}, the font designed for '{idioma}', can't not be found in your operating system."
-            )
-            sys.exit()
-        else:
-            fuente = (
-                "C:/Users/Augusto/Appdata/local/microsoft/windows/fonts/"
-                + fuentes[idioma]
-            )
+            continue
+
+    if not font:
+        print(f"Error: Font {fuentes[idioma]} for '{idioma}' not found")
+        sys.exit(1)
+
+    start_time = time.time()
+
+    # Generate cache filename
+    font_base = os.path.splitext(os.path.basename(fuentes[idioma]))[0]
+    cache_filename = f"chars_{idioma}-{detail_level}-{nivel_complejidad}-{font_base}{'-empty' if empty_char else ''}.list"
+    cache_path = os.path.join(characterize_path, "dict_caracteres", cache_filename)
+
+    # Try to load from cache first
+    if os.path.exists(cache_path):
+        with open(cache_path, 'rb') as f:
+            char_list_original = pickle.load(f)
+        char_list = [x[0] for x in char_list_original]
+        print(f"\nCharacter list loaded in {to_hours_minutes_seconds(time.time() - start_time)}")
     else:
-        fuente = fuentes[idioma]
-
-    t3 = time.time()
-
-    if (
-        not f"caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-empty' if empty_char else ''}.list"
-        in os.listdir(os.path.join(characterize_path, "dict_caracteres"))
-    ):
-        print(
-            "\nCreating a list containing a characters' ranking by brightness levels to accelerate the script's execution in the future..."
-        )
-        lista_caracteres_original = rank.create_ranking(
-            nivel_detalle_caracter,
-            font=fuente,
+        print("\nCreating character ranking by brightness levels...")
+        char_list_original = rank.create_ranking(
+            detail_level,
+            font=font_file,
             list_size=nivel_complejidad,
-            allowed_characters=dict_caracteres[idioma],
+            allowed_characters=char_dict[idioma]
         )
         
         if empty_char:
-            lista_caracteres_original.append((" ", 0))
-            lista_caracteres_original.sort(key=lambda x: x[1])
-            lista_caracteres_original = lista_caracteres_original[:nivel_complejidad]
+            char_list_original.append((" ", 0))
+            char_list_original.sort(key=lambda x: x[1])
+            char_list_original = char_list_original[:nivel_complejidad]
 
-        pickle.dump(
-            lista_caracteres_original,
-            open(
-                os.path.join(
-                    characterize_path,
-                    f"dict_caracteres/caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-empty' if empty_char else ''}.list",
-                ),
-                "wb",
-            ),
-        )
-        lista_caracteres = [x[0] for x in lista_caracteres_original]
-        print(f"Characters list created in {round(time.time()-t3, 2)} seconds.\n")
-    else:
-        lista_caracteres_original = pickle.load(
-            open(
-                os.path.join(
-                    characterize_path,
-                    f"dict_caracteres/caracteres_{idioma}-{nivel_detalle_caracter}-{nivel_complejidad}-{fuentes[idioma][0:fuentes[idioma].index('.')]}{'-empty' if empty_char else ''}.list",
-                ),
-                "rb",
-            )
-        )
-        lista_caracteres = [x[0] for x in lista_caracteres_original]
-        print(
-            "\n"
-            + f"Characters list loaded in {to_hours_minutes_seconds(time.time() -  t3)}."
-        )
+        # Save to cache
+        with open(cache_path, 'wb') as f:
+            pickle.dump(char_list_original, f)
+        
+        char_list = [x[0] for x in char_list_original]
+        print(f"Character list created in {round(time.time() - start_time, 2)} seconds\n")
     t4 = time.time()
     if any(x in formato_final for x in ["jpg", "png"]):
         char_images = create_char_image_dict(
