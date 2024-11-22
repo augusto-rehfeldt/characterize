@@ -91,7 +91,7 @@ def get_chars(image, char_list, char_images, format, color):
             )
         )
     # create a list
-    characters = (
+    characters_output = (
         [[char_images[char_list[y]] for y in color_int] for color_int in color_levels]
         if any(x in format for x in ["png", "jpg"])
         else []
@@ -108,7 +108,7 @@ def get_chars(image, char_list, char_images, format, color):
         else []
     )
     # return the list
-    return characters, characters_aux
+    return characters_output, characters_aux
 
 
 def unite_image(characters, original_width, original_height, detail_level):
@@ -199,13 +199,13 @@ def save_text(characters, filename):
         f.writelines([" ".join(line) + "\n" for line in characters])
 
 
-def rutina(
+def process_routine(
     image,
-    char_list,
+    character_list,
     char_images,
-    detail,
-    divide,
-    format,
+    character_detail_level,
+    divide_image_flag,
+    output_format,
     resize,
     color,
     folder_name,
@@ -236,7 +236,7 @@ def rutina(
             )
 
         # If the image is too big, divide it into smaller parts
-        if divide:
+        if divide_image_flag:
             image_list = divide_image(image, 408960)
         else:
             image_list = [image]
@@ -247,34 +247,35 @@ def rutina(
     # Process each divided image or the whole image
     for im in image_list:
         im = ImageEnhance.Color(im).enhance(2)
-        characters_imagen = get_chars(im, char_list, char_images, format, color=color)
+        characters_output = get_chars(im, character_list, char_images, output_format, color=color)
 
         # If saving as text
-        if "txt" in format:
+        if "txt" in output_format:
             image_name = image_name.replace("\\", "/")
             filename = os.path.join(
                 os.path.join(characterize_path, folder_name),
                 "".join(image_name.split("/")[-1].split(".")[:-1]) + ".txt",
             )
-            save_text(characters_imagen[1], filename)
+            save_text(characters_output[1], filename)
             if tkinter:
                 print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
 
         # If saving as image
-        if any(ext in format for ext in ["png", "jpg"]):
-            imagen_final = unite_image(
-                characters_imagen[0], im.width, im.height, detail
+        if any(ext in output_format for ext in ["png", "jpg"]):
+            final_image = unite_image(
+                characters_output[0], im.width, im.height, character_detail_level
             )
             im = im.resize(
-                (im.width * detail, im.height * detail), resample=Image.Resampling.BOX
+                (im.width * character_detail_level, im.height * character_detail_level),
+                resample=Image.Resampling.BOX
             )
             bg_w, bg_h = im.size
-            img_w, img_h = imagen_final.size
+            img_w, img_h = final_image.size
             offset = ((bg_w - img_w) // 2, (bg_h - img_h) // 2)
 
             # Convert both images to RGBA mode before pasting
             im = im.convert("RGBA")
-            imagen_final = imagen_final.convert("RGBA")
+            final_image = final_image.convert("RGBA")
 
             # Create a new blank image with the same size as 'im'
             combined = Image.new("RGBA", im.size, (0, 0, 0, 0))
@@ -282,8 +283,8 @@ def rutina(
             # Paste 'im' onto the new image
             combined.paste(im, (0, 0))
 
-            # Paste 'imagen_final' onto the new image
-            combined.paste(imagen_final, offset, imagen_final)
+            # Paste 'final_image' onto the new image
+            combined.paste(final_image, offset, final_image)
 
             # Convert back to RGB for saving
             combined = combined.convert("RGB")
@@ -302,11 +303,11 @@ def rutina(
             )
 
             # Start the thread for saving the image
-            save_image(combined, format, color, filename)
+            save_image(combined, output_format, color, filename)
 
             if tkinter:
                 print(
-                    f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in format else filename+'.jpg'}>>"
+                    f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in output_format else filename+'.jpg'}>>"
                 )
 
             return filename
@@ -432,14 +433,14 @@ def optimize_files(files, num_threads):
         executor.map(optimize_file, files)
 
 
-def process_image(image, lista_caracteres, char_images, nivel_detalle_caracter, dividir_imagen, formato_final, resize, color, folder_name, tkinter):
-    return rutina(
+def process_image(image, character_list, char_images, character_detail_level, divide_image_flag, output_format, resize, color, folder_name, tkinter):
+    return process_routine(
         image,
-        lista_caracteres,
+        character_list,
         char_images,
-        nivel_detalle_caracter,
-        dividir_imagen,
-        formato_final,
+        character_detail_level,
+        divide_image_flag,
+        output_format,
         resize,
         color,
         folder_name,
@@ -450,10 +451,10 @@ def process_image(image, lista_caracteres, char_images, nivel_detalle_caracter, 
 if __name__ == "__main__":
     if not os.path.exists(os.path.join(characterize_path, "output")):
         os.makedirs(os.path.join(characterize_path, "output"))
-    if not os.path.exists(os.path.join(characterize_path, "dict_caracteres")):
-        os.makedirs(os.path.join(characterize_path, "dict_caracteres"))
+    if not os.path.exists(os.path.join(characterize_path, "dict_characters")):
+        os.makedirs(os.path.join(characterize_path, "dict_characters"))
 
-    fuentes = {
+    fonts = {
         "ascii": "arial.ttf",
         "arabic": "arial.ttf",
         "braille": "seguisym.ttf",
@@ -471,25 +472,25 @@ if __name__ == "__main__":
         "hangul": "malgunbd.ttf",
     }
 
-    languages = list(fuentes.keys())
+    languages = list(fonts.keys())
 
     (
-        idioma,
-        nivel_complejidad,
+        language,
+        complexity_level,
         color,
         image_src,
         resize,
         empty_char,
-        dividir_imagen,
-        formato_final,
+        divide_image_flag,
+        output_format,
         optimize,
         tkinter,
     ) = parse_arguments()
 
-    if not idioma or not idioma in languages:
-        idioma = choose_option("characters", sorted(languages))
-    if not nivel_complejidad or not nivel_complejidad in range(1, 41):
-        nivel_complejidad = choose_value("complexity level", 1, 40)
+    if not language or not language in languages:
+        language = choose_option("characters", sorted(languages))
+    if not complexity_level or not complexity_level in range(1, 41):
+        complexity_level = choose_value("complexity level", 1, 40)
     if len(color) != 2 or not color[0]:
         color = binary_choice("use color")
     else:
@@ -499,18 +500,18 @@ if __name__ == "__main__":
     if not isinstance(resize, tuple) or not resize[0]:
         choice = choose_value("character resolution", 1, 4000)
         resize = (True, (choice, choice))
-    if not dividir_imagen[0]:
-        dividir_imagen = binary_choice("subdivide the image")
+    if not divide_image_flag[0]:
+        divide_image_flag = binary_choice("subdivide the image")
     else:
-        dividir_imagen = dividir_imagen[1]
+        divide_image_flag = divide_image_flag[1]
     if len(empty_char) != 2 or not empty_char[0]:
         empty_char = binary_choice("use an empty character to represent the darkest pixels")
     else:
         empty_char = empty_char[1]
-    if not formato_final or not any(
-        x in ["png", "jpg", "txt"] for x in formato_final.split()
+    if not output_format or not any(
+        x in ["png", "jpg", "txt"] for x in output_format.split()
     ):
-        formato_final = choose_option(
+        output_format = choose_option(
             "file formats",
             ["png", "jpg", "txt", "txt, png", "txt, jpg", "png, jpg", "png, jpg, txt"],
         )
@@ -519,17 +520,17 @@ if __name__ == "__main__":
     else:
         optimize = optimize[1]
 
-    folder_name = f"output/{idioma}"
+    folder_name = f"output/{language}"
 
     if not os.path.exists(os.path.join(characterize_path, folder_name)):
         os.makedirs(os.path.join(characterize_path, folder_name))
 
-    if "txt" in formato_final:
-        if not os.path.exists(os.path.join(characterize_path, f"output/{idioma}/text")):
-            os.makedirs(os.path.join(characterize_path, f"output/{idioma}/text"))
+    if "txt" in output_format:
+        if not os.path.exists(os.path.join(characterize_path, f"output/{language}/text")):
+            os.makedirs(os.path.join(characterize_path, f"output/{language}/text"))
 
-    if not any(x in formato_final for x in ("png", "jpg", "txt")):
-        formato_final = "png"
+    if not any(x in output_format for x in ("png", "jpg", "txt")):
+        output_format = "png"
 
     image_list = []
     valid_extensions = {'.jpg', '.jpeg', '.png', '.jfif', '.webp'}
@@ -553,15 +554,15 @@ if __name__ == "__main__":
         "braille": 16,
         "hiragana": 15, "katakana": 15, "kanji": 15,
         "chinese": 15, "hangul": 15, "arabic": 15
-    }.get(idioma, 12)
+    }.get(language, 12)
 
-    char_dict = characters.dict_caracteres
+    character_dict = characters.dict_caracteres
 
     # Font paths to try
     font_paths = [
-        fuentes[idioma],
+        fonts[language],
         os.path.join(os.environ.get('LOCALAPPDATA', ''), 
-                    'Microsoft/Windows/Fonts', fuentes[idioma])
+                    'Microsoft/Windows/Fonts', fonts[language])
     ]
 
     font = None
@@ -574,15 +575,15 @@ if __name__ == "__main__":
             continue
 
     if not font:
-        print(f"Error: Font {fuentes[idioma]} for '{idioma}' not found")
+        print(f"Error: Font {fonts[language]} for '{language}' not found")
         sys.exit(1)
 
     start_time = time.time()
 
     # Generate cache filename
-    font_base = os.path.splitext(os.path.basename(fuentes[idioma]))[0]
-    cache_filename = f"chars_{idioma}-{detail_level}-{nivel_complejidad}-{font_base}{'-empty' if empty_char else ''}.list"
-    cache_path = os.path.join(characterize_path, "dict_caracteres", cache_filename)
+    font_base = os.path.splitext(os.path.basename(fonts[language]))[0]
+    cache_filename = f"chars_{language}-{detail_level}-{complexity_level}-{font_base}{'-empty' if empty_char else ''}.list"
+    cache_path = os.path.join(characterize_path, "dict_characters", cache_filename)
 
     # Try to load from cache first
     if os.path.exists(cache_path):
@@ -595,14 +596,14 @@ if __name__ == "__main__":
         char_list_original = rank.create_ranking(
             detail_level,
             font=font_file,
-            list_size=nivel_complejidad,
-            allowed_characters=char_dict[idioma]
+            list_size=complexity_level,
+            allowed_characters=character_dict[language]
         )
         
         if empty_char:
             char_list_original.append((" ", 0))
             char_list_original.sort(key=lambda x: x[1])
-            char_list_original = char_list_original[:nivel_complejidad]
+            char_list_original = char_list_original[:complexity_level]
 
         # Save to cache
         with open(cache_path, 'wb') as f:
@@ -611,7 +612,7 @@ if __name__ == "__main__":
         char_list = [x[0] for x in char_list_original]
         print(f"Character list created in {round(time.time() - start_time, 2)} seconds\n")
     t4 = time.time()
-    if any(x in formato_final for x in ["jpg", "png"]):
+    if any(x in output_format for x in ["jpg", "png"]):
         char_images = create_char_image_dict(
             char_list, detail_level, font_file, color
         )
@@ -630,17 +631,17 @@ if __name__ == "__main__":
     t0 = time.time()
 
     if num_iterations == 1:
-        t_interno = time.time()
+        internal_time = time.time()
         results = []
         for i, image in enumerate(image_list):
             results.append(
-                rutina(
+                process_routine(
                     image,
                     char_list,
                     char_images,
                     detail_level,
-                    dividir_imagen,
-                    formato_final,
+                    divide_image_flag,
+                    output_format,
                     resize,
                     color,
                     folder_name,
@@ -648,7 +649,7 @@ if __name__ == "__main__":
                 )
             )
         if not tkinter:
-            print(f"Elapsed time: {to_hours_minutes_seconds(time.time()-t_interno)}")
+            print(f"Elapsed time: {to_hours_minutes_seconds(time.time()-internal_time)}")
     else:
         results = []
         with ProcessPoolExecutor(max_workers=t) as executor:
@@ -659,8 +660,8 @@ if __name__ == "__main__":
                     char_list,
                     char_images,
                     detail_level,
-                    dividir_imagen,
-                    formato_final,
+                    divide_image_flag,
+                    output_format,
                     resize,
                     color,
                     folder_name,
@@ -675,15 +676,15 @@ if __name__ == "__main__":
                     f"Total execution time: {to_hours_minutes_seconds(round((time.time() - t0), 2))}"
                 )
 
-    formato_final = [
+    output_format = [
         x.replace(",", "").replace(".", "").replace(";", "")
-        for x in formato_final.split()
+        for x in output_format.split()
         if any(z in x for z in ["png", "jpg", "txt"])
     ]
 
     results = [
         item
-        for sublist in [[r + f".{f}" for r in results] for f in formato_final]
+        for sublist in [[r + f".{f}" for r in results] for f in output_format]
         for item in sublist
     ]
 
