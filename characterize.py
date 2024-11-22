@@ -613,15 +613,15 @@ if __name__ == "__main__":
     t4 = time.time()
     if any(x in formato_final for x in ["jpg", "png"]):
         char_images = create_char_image_dict(
-            lista_caracteres, nivel_detalle_caracter, fuente, color
+            char_list, detail_level, font_file, color
         )
         print(f"Characters dict created in {round(time.time()-t4, 2)} seconds.\n")
     else:
         char_images = False
     t = os.cpu_count() // 2 if os.cpu_count() >= 2 else 1
-    num_iterations = len(lista_imagenes)
-    if len(lista_caracteres) <= 30:
-        print("Characters to use:", lista_caracteres_original, "\n")
+    num_iterations = len(image_list)
+    if len(char_list) <= 30:
+        print("Characters to use:", char_list_original, "\n")
     print(
         f"Processing {num_iterations} {'image' if num_iterations == 1 else 'images'}{' in '+str(math.ceil(num_iterations/t))+' cycles' if not t > num_iterations else ''}...",
         end="\n\n",
@@ -632,13 +632,13 @@ if __name__ == "__main__":
     if num_iterations == 1:
         t_interno = time.time()
         results = []
-        for i, image in enumerate(lista_imagenes):
+        for i, image in enumerate(image_list):
             results.append(
                 rutina(
                     image,
-                    lista_caracteres,
+                    char_list,
                     char_images,
-                    nivel_detalle_caracter,
+                    detail_level,
                     dividir_imagen,
                     formato_final,
                     resize,
@@ -655,10 +655,10 @@ if __name__ == "__main__":
             futures = [
                 executor.submit(
                     process_image,
-                    lista_imagenes[i],
-                    lista_caracteres,
+                    image_list[i],
+                    char_list,
                     char_images,
-                    nivel_detalle_caracter,
+                    detail_level,
                     dividir_imagen,
                     formato_final,
                     resize,
