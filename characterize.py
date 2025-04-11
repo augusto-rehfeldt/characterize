@@ -48,8 +48,8 @@ def create_char_image(char, color, detail, font):
         fill=color,
         anchor="mm",
     )
-    # return the new image
-    return new_image
+    # return the new image as a NumPy array
+    return np.array(new_image)
 
 
 def create_char_image_dict(characters, detail, font, color=False):
@@ -116,9 +116,9 @@ def unite_image(characters, original_width, original_height, detail_level):
     # characters is organized as rows (height) then columns (width)
     for j in range(original_height):
         for i in range(original_width):
-            # Convert character PIL image to NumPy array
-            char_image_np = np.array(characters[j][i].convert("RGBA"))
-            
+            # Character is already a NumPy array
+            char_image_np = characters[j][i]
+
             # Calculate the slice coordinates
             y_start = j * detail_level
             y_end = y_start + detail_level
@@ -140,9 +140,8 @@ def unite_image(characters, original_width, original_height, detail_level):
                      print(f"Error: Could not place character at ({i},{j}) due to size mismatch.")
 
 
-    # Convert the final NumPy array back to a PIL Image
-    new_image = Image.fromarray(final_image_np, 'RGBA')
-    return new_image
+    # Return the final NumPy array directly
+    return final_image_np
 
 
 def divide_image(image, min_size):
@@ -284,7 +283,8 @@ def process_routine(
 
         # If saving as image
         if any(ext in output_format for ext in ["png", "jpg"]):
-            final_image = unite_image(
+            # unite_image now returns a NumPy array directly
+            final_image_np = unite_image(
                 characters_output[0], im.width, im.height, character_detail_level
             )
             # Resize original image to match final output size
@@ -295,7 +295,7 @@ def process_routine(
 
             # Convert images to NumPy arrays (RGBA)
             im_np = np.array(im_resized.convert("RGBA"))
-            final_image_np = np.array(final_image.convert("RGBA"))
+            # No longer needed, final_image_np is already the NumPy array from unite_image
 
             # Calculate offset for centering final_image on im_resized
             bg_h, bg_w, _ = im_np.shape
