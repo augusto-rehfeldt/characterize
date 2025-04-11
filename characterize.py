@@ -14,7 +14,7 @@ import re
 
 import numpy as np
 
-from PIL import Image, ImageFont, ImageDraw, ImageEnhance
+from PIL import Image, ImageFont, ImageDraw, ImageEnhance, UnidentifiedImageError
 
 
 characterize_path = os.path.realpath(os.path.dirname(__file__))
@@ -240,7 +240,7 @@ def process_routine(
         original_image_path = image # Store path for error message
         try:
             image = Image.open(image).convert("RGB")
-        except PIL.UnidentifiedImageError:
+        except UnidentifiedImageError:
             print(f"Warning: Cannot identify image file '{original_image_path}'. Skipping.")
             return None # Indicate failure
 

@@ -8,3 +8,5 @@
 **/__pycache__
 .aider*
 .env
+frames_to_video.py
+video_to_frames.py
