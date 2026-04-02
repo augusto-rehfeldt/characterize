@@ -2,12 +2,21 @@
 import argparse
 import sys
 import os
+from PIL import Image, UnidentifiedImageError
 from charlib.player import VideoPlayer
 
+def _is_image_file(path):
+    try:
+        with Image.open(path) as img:
+            img.verify()
+        return True
+    except (UnidentifiedImageError, OSError):
+        return False
+
 def create_parser():
-    p = argparse.ArgumentParser(description="Real-time ASCII video playback")
+    p = argparse.ArgumentParser(description="Real-time ASCII video or image playback")
     p.add_argument("-i", "--input", required=False,
-                   help="Path to video file")
+                   help="Path to video or image file")
     p.add_argument("-W", "--width", type=int, default=80,
                    help="Output width in characters")
     p.add_argument("-H", "--height", type=int,
@@ -34,9 +43,9 @@ def main():
     
     if len(sys.argv) == 1:
         print("No command-line arguments provided. Entering interactive mode.")
-        video_input_path = input("Enter video file path: ").strip('\'"')
+        video_input_path = input("Enter image or video file path: ").strip('\'"')
         if not video_input_path or not os.path.isfile(video_input_path):
-            print(f"Error: Video file '{video_input_path}' not found or invalid.")
+            print(f"Error: media file '{video_input_path}' not found or invalid.")
             sys.exit(1)
         width_str = input(f"Output width in characters (default: 80, press Enter): ")
         parsed_cli_args = ['-i', video_input_path]
@@ -46,12 +55,17 @@ def main():
                 parsed_cli_args.extend(['-W', width_str])
             except ValueError:
                 print(f"Warning: Invalid width '{width_str}', using default 80.")
+        if _is_image_file(video_input_path):
+            parsed_cli_args.append("--terminal")
         args = parser.parse_args(parsed_cli_args)
     else:
         args = parser.parse_args()
         if not args.input or not os.path.isfile(args.input):
-            print(f"Error: video file '{args.input}' not found. Please provide a valid path.")
+            print(f"Error: media file '{args.input}' not found. Please provide a valid path.")
             sys.exit(1)
+        if _is_image_file(args.input) and not args.terminal:
+            print("Info: image input detected. Using terminal mode automatically.")
+            args.terminal = True
 
     player = VideoPlayer(args)
     player.run()

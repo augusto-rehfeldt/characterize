@@ -1,16 +1,22 @@
-import argparse
 import time
 import sys
 import os
-import cv2
-import pygame
 import subprocess
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from charlib.image_utils import get_chars, sample_colors
 import rank
 import characters
 import tempfile
-import numpy as np
+
+try:
+    import cv2
+except ImportError:  # Optional for terminal-only / image-only usage
+    cv2 = None
+
+try:
+    import pygame
+except ImportError:  # Optional for terminal-only / image-only usage
+    pygame = None
 
 class VideoPlayer:
     def __init__(self, args):
@@ -28,19 +34,18 @@ class VideoPlayer:
         }
         self.CONTROLS_AREA_HEIGHT = 100
         self.char_list = self._build_char_list()
-        self.cap = cv2.VideoCapture(self.args.input)
-        if not self.cap.isOpened():
-            print(f"Error: cannot open video {self.args.input}")
-            sys.exit(1)
-        self.orig_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.orig_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.cv_fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.cap = None
+        self.is_image_input = False
+        self.still_image = None
+        self._load_input_source()
         self.fps = self.args.framerate or self.cv_fps or 24.0
-        self.delay = 1.0 / self.fps
+        self.delay = 0.0 if self.is_image_input or self.fps <= 0 else 1.0 / self.fps
         self.target_w_chars = self.args.width
         self.target_h_chars = self._calculate_target_height()
-        self.total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        self.total_duration = self.total_frames / self.fps if self.total_frames > 0 and self.fps > 0 else 0
+        self.total_frames = 1 if self.is_image_input else int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.total_duration = 0.0 if self.is_image_input else (
+            self.total_frames / self.fps if self.total_frames > 0 and self.fps > 0 else 0
+        )
         self.screen = None
         self.font = None
         self.char_width, self.char_height = 1, 1
@@ -74,11 +79,42 @@ class VideoPlayer:
         self.extended_timeline_rect = None
         self.slider_rect = None
         self.button_font = None
-        self.pygame_font_path = self._find_pygame_font()
+        self.pygame_font_path = None if self.args.terminal else self._find_pygame_font()
+
+    def _load_input_source(self):
+        try:
+            with Image.open(self.args.input) as image:
+                self.still_image = image.convert("RGB")
+            self.is_image_input = True
+            self.orig_w, self.orig_h = self.still_image.size
+            self.cv_fps = 1.0
+            if not self.args.terminal:
+                print("Info: image input detected. Use --terminal to render it in the terminal.")
+                sys.exit(1)
+            return
+        except (UnidentifiedImageError, OSError):
+            pass
+
+        if cv2 is None:
+            print("Error: OpenCV (cv2) is required for video playback but is not installed.")
+            sys.exit(1)
+
+        self.cap = cv2.VideoCapture(self.args.input)
+        if not self.cap.isOpened():
+            print(f"Error: cannot open video {self.args.input}")
+            sys.exit(1)
+
+        self.orig_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.orig_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.cv_fps = self.cap.get(cv2.CAP_PROP_FPS)
 
     def _find_pygame_font(self):
-        pygame.init()
-        pygame.mixer.init()
+        if pygame is None:
+            return None
+
+        if not pygame.font.get_init():
+            pygame.font.init()
+
         mono_fonts = ['Consolas', 'Courier New', 'monospace', 'DejaVu Sans Mono']
         for font_name in mono_fonts:
             try:
@@ -154,6 +190,11 @@ class VideoPlayer:
         return best_font, final_char_w, final_char_h, best_fs
 
     def _init_pygame(self):
+        if pygame is None:
+            print("Warning: pygame is not installed. Falling back to terminal output.")
+            self.args.terminal = True
+            return
+
         try:
             initial_win_w, initial_win_h_controls = self.original_window_size
             video_area_w = initial_win_w
@@ -186,6 +227,20 @@ class VideoPlayer:
             print(f"Warning: Failed to load volume_icon.png: {e}. Volume slider will appear without icon.")
 
     def _extract_audio(self):
+        if self.is_image_input:
+            return
+
+        if pygame is None or not hasattr(pygame, "mixer"):
+            print("Warning: pygame audio support is unavailable. Video will play without sound.")
+            return
+
+        if not pygame.mixer.get_init():
+            try:
+                pygame.mixer.init()
+            except Exception as e:
+                print(f"Warning: Could not initialize audio. Video will play without sound.\n{e}")
+                return
+
         ffmpeg_available = False
         try:
             subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
@@ -386,11 +441,16 @@ class VideoPlayer:
         )
 
     def _render_frame(self, frame_to_render):
-        pil_img = Image.fromarray(cv2.cvtColor(frame_to_render, cv2.COLOR_BGR2RGB))
+        if isinstance(frame_to_render, Image.Image):
+            pil_img = frame_to_render.convert("RGB")
+        else:
+            if cv2 is None:
+                raise RuntimeError("OpenCV is required to render video frames.")
+            pil_img = Image.fromarray(cv2.cvtColor(frame_to_render, cv2.COLOR_BGR2RGB))
         img_resized_for_ascii = pil_img.resize((self.target_w_chars, self.target_h_chars))
         color_data_grid = None
         if self.args.color or self.args.true_color:
-            source_for_color = cv2.cvtColor(frame_to_render, cv2.COLOR_BGR2RGB) if self.args.true_color else img_resized_for_ascii
+            source_for_color = pil_img if self.args.true_color else img_resized_for_ascii
             color_data_grid = sample_colors(source_for_color, self.target_w_chars, self.target_h_chars)
         _, out_txt_list = get_chars(img_resized_for_ascii, self.char_list, None, fmt="txt", color=False)
         if self.args.terminal:
@@ -464,6 +524,13 @@ class VideoPlayer:
         self.screen.blit(play_button_surface_render, self.button_rect.topleft)
 
     def run(self):
+        if self.is_image_input:
+            if self.args.terminal:
+                self._render_frame(self.still_image)
+            else:
+                print("Info: image inputs are rendered in terminal mode.")
+            return
+
         if not self.args.terminal:
             self._init_pygame()
         self._extract_audio()
@@ -499,10 +566,12 @@ class VideoPlayer:
         except KeyboardInterrupt:
             print("\nPlayback interrupted by user.")
         finally:
-            self.cap.release()
-            if self.audio_loaded:
+            if self.cap is not None:
+                self.cap.release()
+            if self.audio_loaded and pygame is not None:
                 pygame.mixer.music.stop()
-            pygame.quit()
+            if pygame is not None:
+                pygame.quit()
 
     @staticmethod
     def clear_screen():

@@ -1,7 +1,11 @@
 import time
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
-import cv2
+
+try:
+    import cv2
+except ImportError:  # Optional for terminal-only / image-only usage
+    cv2 = None
 
 # ANSI escape code constants
 ANSI_RESET = "\033[0m"
@@ -158,23 +162,35 @@ def sample_colors(img, width, height):
     """
     Efficiently samples colors from an image by resizing it to the target dimensions.
     """
+    if width <= 0 or height <= 0:
+        return np.zeros((0, 0, 3), dtype=np.uint8)
+
+    if cv2 is not None:
+        if isinstance(img, Image.Image):
+            img_np = np.array(img.convert("RGB"))
+        else:
+            img_np = np.asarray(img)
+
+        if img_np.ndim == 2:
+            img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
+        elif img_np.ndim == 3 and img_np.shape[2] == 4:
+            img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
+
+        return cv2.resize(img_np, (width, height), interpolation=cv2.INTER_AREA)
+
+    # Fallback path for environments without OpenCV.
     if isinstance(img, Image.Image):
-        # Convert PIL Image to numpy array
-        img_np = np.array(img.convert("RGB"))
-    else: # Assuming numpy array from cv2
-        img_np = img
+        pil_img = img.convert("RGB")
+    else:
+        img_np = np.asarray(img)
+        if img_np.ndim == 2:
+            img_np = np.stack([img_np] * 3, axis=-1)
+        elif img_np.ndim == 3 and img_np.shape[2] == 4:
+            img_np = img_np[:, :, :3]
+        pil_img = Image.fromarray(np.clip(img_np, 0, 255).astype(np.uint8), "RGB")
 
-    # Ensure the image is in RGB format for resizing
-    if img_np.ndim == 2: # Grayscale
-        img_np = cv2.cvtColor(img_np, cv2.COLOR_GRAY2RGB)
-    elif img_np.shape[2] == 4: # RGBA
-        img_np = cv2.cvtColor(img_np, cv2.COLOR_RGBA2RGB)
-
-    # Resize the image to the target grid size using cv2.resize for performance
-    # cv2.INTER_AREA is recommended for down-sampling
-    resized_img = cv2.resize(img_np, (width, height), interpolation=cv2.INTER_AREA)
-    
-    return resized_img
+    resized_img = pil_img.resize((width, height), resample=Image.Resampling.BOX)
+    return np.array(resized_img)
 
 def divide_image(image, min_size):
     parts = [image]

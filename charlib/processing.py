@@ -18,7 +18,7 @@ def process_routine(
     tkinter,
 ):
     t_image = time.time()
-    image_name = "".join([x for x in image])
+    image_name = image if isinstance(image, str) else getattr(image, "filename", "image")
 
     if tkinter:
         print(f"<<{image_name}<<P>>")

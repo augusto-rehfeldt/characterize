@@ -228,7 +228,7 @@ def process_routine(
     tkinter,
 ):
     t_image = time.time()
-    image_name = "".join([x for x in image])
+    image_name = image if isinstance(image, str) else getattr(image, "filename", "image")
 
     # Inform if tkinter is being used
     if tkinter:
@@ -465,12 +465,6 @@ def parse_arguments():
     tk = args.tk
 
     return l, cl, c, input_files, cr, ec, d, f, o, tk
-
-
-def divide_list(lst, n):
-    """Divide a list into n approximately equal parts."""
-    k, m = divmod(len(lst), n)
-    return [lst[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
 
 
 def optimize_file(file_path):
