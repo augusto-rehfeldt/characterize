@@ -16,6 +16,8 @@ import numpy as np
 
 from PIL import Image, ImageFont, ImageDraw, ImageEnhance, UnidentifiedImageError
 
+from charlib.terminal import render_terminal_image
+
 
 characterize_path = os.path.realpath(os.path.dirname(__file__))
 
@@ -363,57 +365,6 @@ def process_routine(
             return filename
 
 
-def choose_option(what, options_list, text=True):
-    if text:
-        list_as_items = [
-            str(i + 1) + ") " + str(item) + "\n" for i, item in enumerate(options_list)
-        ]
-        items = ""
-        for item in list_as_items:
-            items += item
-        print(f"\nWhich of the following {what} do you want to use?\n\n{items}")
-    try:
-        choice = int(input("Choice: "))
-    except ValueError:
-        return choose_option(what, options_list, False)
-    else:
-        if not 0 < choice < len(options_list) + 1:
-            return choose_option(what, options_list, False)
-        return options_list[choice - 1]
-
-
-def choose_value(what, min=False, max=False, text=True):
-    if text:
-        print(
-            f"\nPlease enter a {what} integer value {'between '+str(min)+' and '+str(max)+' ' if min and max else ('above '+str(min) if min else 'below '+str(max))}(float values will be converted to integers by rounding them down).\n"
-        )
-    try:
-        choice = int(input("Choice: "))
-    except ValueError:
-        return choose_value(what, min, max, False)
-    else:
-        if max and choice > max:
-            print(f"Choose a value below {max+1}.")
-            return choose_value(what, min, max, False)
-        elif min and choice < min:
-            print(f"Choose a value above {max+1}.")
-            return choose_value(what, min, max, False)
-        return choice
-
-
-def binary_choice(what, text=True):
-    if text:
-        print(f"\nDo you want to {what}?\n\n1) Yes\n2) No\n")
-    try:
-        choice = int(input("Choice: "))
-    except ValueError:
-        return binary_choice(what, False)
-    else:
-        if not choice in [1, 2]:
-            return binary_choice(what, False)
-        return True if choice == 1 else False
-
-
 def input_files(text=True):
     if text:
         print(
@@ -432,40 +383,491 @@ def input_files(text=True):
     return paths if len(paths) > 0 else input_files()
 
 
-def parse_arguments():
-    # Simplify boolean argument parsing
-    def str_to_bool(value):
-        return value.lower() in ['true', 't', 'yes', 'y']
+VIDEO_EXTENSIONS = {
+    ".mp4", ".mkv", ".mov", ".avi", ".webm", ".m4v", ".mpg", ".mpeg", ".wmv", ".flv"
+}
 
-    parser = argparse.ArgumentParser()
+DEFAULT_FONTS = {
+    "ascii": "arial.ttf",
+    "arabic": "arial.ttf",
+    "braille": "seguisym.ttf",
+    "emoji": "seguiemj.ttf",
+    "chinese": "msyh.ttc",
+    "simple": "arial.ttf",
+    "numbers+": "arial.ttf",
+    "roman": "times.ttf",
+    "numbers": "arial.ttf",
+    "latin": "arial.ttf",
+    "hiragana": "msyh.ttc",
+    "katakana": "msyh.ttc",
+    "kanji": "msyh.ttc",
+    "cyrillic": "arial.ttf",
+    "hangul": "malgunbd.ttf",
+}
 
-    parser.add_argument("-i", "--i", type=str, nargs="*", help='input file paths MANY ["path1", "path2", ...]')
-    parser.add_argument("-cr", "--cr", type=int, help="character resolution parameter ONE (1 to 4000)")
-    parser.add_argument("-cl", "--cl", type=int, help="complexity level parameter ONE (1 to 4000)")
-    parser.add_argument("-l", "--l", type=str, help="language parameter ONE [ascii, chinese, ...]")
-    parser.add_argument("-d", "--d", type=str, help="divide parameter ONE (true/false)")
-    parser.add_argument("-c", "--c", type=str, help="color parameter ONE (true/false)")
-    parser.add_argument("-f", "--f", nargs="+", help="format parameter MANY [png, jpg, txt]")
-    parser.add_argument("-o", "--o", type=str, help="optimize parameter ONE (true/false)")
-    parser.add_argument("-ec", "--ec", type=str, help="empty character parameter ONE (true/false)")
-    parser.add_argument("-tk", "--tk", type=lambda x: str_to_bool(x), help="tkinter parameter ONE (true/false)")
-    args = parser.parse_args()
+DETAIL_BY_LANGUAGE = {
+    "braille": 16,
+    "hiragana": 15,
+    "katakana": 15,
+    "kanji": 15,
+    "chinese": 15,
+    "hangul": 15,
+    "arabic": 15,
+}
 
-    input_files = args.i
-    cr = (True, (args.cr, args.cr)) if isinstance(args.cr, int) else (False, False)
-    cl = args.cl
-    l = args.l
+LANGUAGES = list(DEFAULT_FONTS.keys())
 
-    ec = (True, str_to_bool(args.ec)) if args.ec else (False, False)
-    d = (True, str_to_bool(args.d)) if args.d else (False, False)
-    c = (True, str_to_bool(args.c)) if args.c else (False, False)
-    f = " ".join(args.f) if args.f else None
-    o = (True, str_to_bool(args.o)) if args.o else (False, False)
 
-    tk = args.tk
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="Characterize images or play videos from one CLI"
+    )
+    parser.add_argument(
+        "-i",
+        "--input",
+        "--i",
+        nargs="*",
+        default=[],
+        help="Input file paths or folders",
+    )
+    parser.add_argument(
+        "-W",
+        "--width",
+        "--cr",
+        type=int,
+        default=80,
+        help="Render width in characters",
+    )
+    parser.add_argument(
+        "-H",
+        "--height",
+        type=int,
+        default=None,
+        help="Render height in characters (auto if unset)",
+    )
+    parser.add_argument(
+        "-l",
+        "--language",
+        "--l",
+        default="ascii",
+        choices=LANGUAGES,
+        help="Character set",
+    )
+    parser.add_argument(
+        "-C",
+        "--complexity",
+        "--cl",
+        type=int,
+        default=12,
+        help="Number of characters in charset",
+    )
+    parser.add_argument(
+        "--empty",
+        "--ec",
+        action="store_true",
+        help="Render darkest areas as blank",
+    )
+    parser.add_argument(
+        "-r",
+        "--framerate",
+        type=float,
+        default=None,
+        help="Target frames per second (video mode)",
+    )
+    parser.add_argument(
+        "-c",
+        "--color",
+        "--c",
+        action="store_true",
+        help="Enable color output",
+    )
+    parser.add_argument(
+        "--true-color",
+        action="store_true",
+        help="Use actual pixel colors for terminal/video rendering",
+    )
+    parser.add_argument(
+        "--terminal",
+        action="store_true",
+        help="Render output directly in the terminal",
+    )
+    parser.add_argument(
+        "--video",
+        action="store_true",
+        help="Force video playback mode",
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        "--f",
+        default="png",
+        help="Image output format(s): png, jpg, txt",
+    )
+    parser.add_argument(
+        "-d",
+        "--divide",
+        "--d",
+        action="store_true",
+        help="Subdivide large images before processing",
+    )
+    parser.add_argument(
+        "-o",
+        "--optimize",
+        "--o",
+        action="store_true",
+        help="Optimize rendered image outputs when possible",
+    )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Scan folders recursively when collecting image inputs",
+    )
+    return parser
 
-    return l, cl, c, input_files, cr, ec, d, f, o, tk
 
+def parse_arguments(argv=None):
+    return build_parser().parse_args(argv)
+
+
+def is_image_file(path):
+    try:
+        with Image.open(path) as image:
+            image.verify()
+        return True
+    except (UnidentifiedImageError, OSError):
+        return False
+
+
+def is_video_file(path):
+    return os.path.splitext(path)[1].lower() in VIDEO_EXTENSIONS
+
+
+def collect_image_inputs(paths, recursive=False):
+    image_list = []
+    for raw_path in paths:
+        raw_path = raw_path.strip()
+        if not raw_path or not os.path.exists(raw_path):
+            continue
+        if os.path.isdir(raw_path):
+            if recursive:
+                for root, _, files in os.walk(raw_path):
+                    for filename in files:
+                        candidate = os.path.join(root, filename)
+                        if is_image_file(candidate):
+                            image_list.append(candidate)
+            else:
+                for filename in os.listdir(raw_path):
+                    candidate = os.path.join(raw_path, filename)
+                    if os.path.isfile(candidate) and is_image_file(candidate):
+                        image_list.append(candidate)
+        elif is_image_file(raw_path):
+            image_list.append(raw_path)
+    return image_list
+
+
+def collect_video_input(paths, recursive=False):
+    candidates = []
+    for raw_path in paths:
+        raw_path = raw_path.strip()
+        if not raw_path or not os.path.exists(raw_path):
+            continue
+        if os.path.isdir(raw_path):
+            if recursive:
+                walker = os.walk(raw_path)
+            else:
+                walker = [(raw_path, [], os.listdir(raw_path))]
+            for root, _, files in walker:
+                for filename in files:
+                    candidate = os.path.join(root, filename)
+                    if os.path.isfile(candidate) and is_video_file(candidate):
+                        candidates.append(candidate)
+        elif is_video_file(raw_path):
+            candidates.append(raw_path)
+
+    if not candidates:
+        return None
+    if len(candidates) > 1:
+        print(f"Info: multiple video candidates found. Using '{candidates[0]}'.")
+    return candidates[0]
+
+
+def resolve_font(language):
+    font_file = DEFAULT_FONTS[language]
+    font_paths = [
+        font_file,
+        os.path.join(
+            os.environ.get("LOCALAPPDATA", ""),
+            "Microsoft/Windows/Fonts",
+            font_file,
+        ),
+    ]
+
+    for font_path in font_paths:
+        try:
+            ImageFont.truetype(font_path, 10)
+            return font_path
+        except OSError:
+            continue
+    raise FileNotFoundError(f"Font {font_file} for '{language}' not found")
+
+
+def build_character_resources(language, complexity_level, empty_char):
+    detail_level = DETAIL_BY_LANGUAGE.get(language, 12)
+    font_file = resolve_font(language)
+
+    start_time = time.time()
+    font_base = os.path.splitext(os.path.basename(DEFAULT_FONTS[language]))[0]
+    cache_filename = (
+        f"chars_{language}-{detail_level}-{complexity_level}-{font_base}"
+        f"{'-empty' if empty_char else ''}.list"
+    )
+    cache_path = os.path.join(characterize_path, "dict_characters", cache_filename)
+
+    if os.path.exists(cache_path):
+        with open(cache_path, "rb") as cache_file:
+            char_list_original = pickle.load(cache_file)
+        print(f"\nCharacter list loaded in {to_hours_minutes_seconds(time.time() - start_time)}")
+    else:
+        print("\nCreating character ranking by brightness levels...")
+        char_list_original = rank.create_ranking(
+            detail_level,
+            font=font_file,
+            list_size=complexity_level,
+            allowed_characters=characters.dict_caracteres[language],
+        )
+        if empty_char:
+            char_list_original.append((" ", 0))
+            char_list_original.sort(key=lambda x: x[1])
+            char_list_original = char_list_original[:complexity_level]
+        with open(cache_path, "wb") as cache_file:
+            pickle.dump(char_list_original, cache_file)
+        print(
+            f"Character list created in {round(time.time() - start_time, 2)} seconds\n"
+        )
+
+    char_list = [char for char, _ in char_list_original]
+    return char_list, char_list_original, font_file, detail_level
+
+
+def run_terminal_preview(image_list, char_list, width, height, color, true_color):
+    for index, image_path in enumerate(image_list):
+        with Image.open(image_path) as image:
+            pil_image = image.convert("RGB")
+            preview_height = height or max(
+                1,
+                int(pil_image.height / pil_image.width * width * 0.5),
+            )
+            header = f"{index + 1}/{len(image_list)}  {os.path.basename(image_path)}"
+            render_terminal_image(
+                pil_image,
+                char_list,
+                width,
+                preview_height,
+                color=color,
+                true_color=true_color,
+                clear=True,
+                header=header,
+            )
+
+
+def run_image_mode(args, image_list):
+    char_list, char_list_original, font_file, detail_level = build_character_resources(
+        args.language,
+        args.complexity,
+        args.empty,
+    )
+
+    if len(char_list) <= 30:
+        print("Characters to use:", char_list_original, "\n")
+
+    if args.terminal:
+        run_terminal_preview(
+            image_list,
+            char_list,
+            args.width,
+            args.height,
+            args.color,
+            args.true_color,
+        )
+        return
+
+    folder_name = f"output/{args.language}"
+    output_root = os.path.join(characterize_path, folder_name)
+    os.makedirs(output_root, exist_ok=True)
+
+    requested_formats = [
+        token
+        for token in re.split(r"[,\s]+", args.format.strip())
+        if token
+    ]
+
+    if "txt" in requested_formats and not os.path.exists(os.path.join(output_root, "text")):
+        os.makedirs(os.path.join(output_root, "text"), exist_ok=True)
+
+    output_format = [
+        token for token in requested_formats if token in {"png", "jpg", "txt"}
+    ]
+    if not output_format:
+        output_format = ["png"]
+
+    char_images = None
+    if any(ext in output_format for ext in ["jpg", "png"]):
+        t4 = time.time()
+        char_images = create_char_image_dict(
+            char_list,
+            detail_level,
+            font_file,
+            args.color,
+        )
+        print(f"Characters dict created in {round(time.time() - t4, 2)} seconds.\n")
+
+    t = os.cpu_count() // 2 if os.cpu_count() and os.cpu_count() >= 2 else 1
+    num_iterations = len(image_list)
+    print(
+        f"Processing {num_iterations} {'image' if num_iterations == 1 else 'images'}"
+        f"{' in ' + str(math.ceil(num_iterations / t)) + ' cycles' if not t > num_iterations else ''}...",
+        end="\n\n",
+    )
+
+    t0 = time.time()
+    resize = (True, (args.width, args.height or args.width))
+    divide_image_flag = args.divide
+
+    if num_iterations == 1:
+        internal_time = time.time()
+        results = []
+        for image in image_list:
+            results.append(
+                process_routine(
+                    image,
+                    char_list,
+                    char_images,
+                    detail_level,
+                    divide_image_flag,
+                    output_format,
+                    resize,
+                    args.color,
+                    folder_name,
+                    False,
+                )
+            )
+        print(f"Elapsed time: {to_hours_minutes_seconds(time.time() - internal_time)}")
+    else:
+        results = []
+        with ProcessPoolExecutor(max_workers=t) as executor:
+            futures = {
+                executor.submit(
+                    process_image,
+                    image_list[i],
+                    char_list,
+                    char_images,
+                    detail_level,
+                    divide_image_flag,
+                    output_format,
+                    resize,
+                    args.color,
+                    folder_name,
+                    False,
+                ): i
+                for i in range(num_iterations)
+            }
+            start_cycle = time.time()
+            batch_count = 0
+            processed_count = 0
+            for future in as_completed(futures):
+                processed_count += 1
+                batch_count += 1
+                results.append(future.result())
+                if batch_count == t or processed_count == num_iterations:
+                    cycle_time = time.time() - start_cycle
+                    avg_time = cycle_time / batch_count
+                    remaining = num_iterations - processed_count
+                    estimated_remaining = remaining * avg_time
+                    print(
+                        f"\rProcessed {processed_count}/{num_iterations} images. "
+                        f"Batch cycle time: {round(cycle_time, 2)} sec. "
+                        f"Estimated remaining: {to_hours_minutes_seconds(estimated_remaining)}",
+                        end="",
+                        flush=True,
+                    )
+                    batch_count = 0
+                    start_cycle = time.time()
+            print(f"Total execution time: {to_hours_minutes_seconds(time.time() - t0)}")
+
+    results = [item for item in results if item]
+    results = [
+        item
+        for sublist in [[r + f".{f}" for r in results] for f in output_format]
+        for item in sublist
+    ]
+
+    if args.optimize and len(results) <= 300:
+        if os.path.exists("C:/Program Files/FileOptimizer/FileOptimizer64.exe"):
+            print("\n\nOptimizing files in the background...")
+            optimize_files(results, t)
+            print("File optimization completed.")
+        else:
+            print("\nFileOptimizer not found. Skipping optimization...")
+    else:
+        print("\nBypassing file optimization...")
+
+    print(
+        "\n"
+        + f"All done. Characterized images can be found in {output_root}."
+    )
+
+
+def run_video_mode(args, input_path):
+    video_args = argparse.Namespace(
+        input=input_path,
+        width=args.width,
+        height=args.height,
+        language=args.language,
+        complexity=args.complexity,
+        empty=args.empty,
+        framerate=args.framerate,
+        color=args.color,
+        terminal=args.terminal,
+        true_color=args.true_color,
+    )
+    player = VideoPlayer(video_args)
+    player.run()
+
+
+def main(argv=None):
+    if not os.path.exists(os.path.join(characterize_path, "output")):
+        os.makedirs(os.path.join(characterize_path, "output"))
+    if not os.path.exists(os.path.join(characterize_path, "dict_characters")):
+        os.makedirs(os.path.join(characterize_path, "dict_characters"))
+
+    args = parse_arguments(argv)
+    if not args.input:
+        args.input = input_files()
+
+    if not args.input:
+        print("No inputs provided. Closing...")
+        sys.exit(1)
+
+    video_input = collect_video_input(args.input, recursive=args.recursive)
+    if args.video or video_input:
+        if video_input:
+            run_video_mode(args, video_input)
+            return
+        image_list = collect_image_inputs(args.input, recursive=args.recursive)
+        if image_list:
+            print("Info: no video candidates found; previewing images in terminal mode.")
+            args.terminal = True
+            run_image_mode(args, image_list)
+            return
+        print("No video input found. Closing...")
+        sys.exit(1)
+
+    image_list = collect_image_inputs(args.input, recursive=args.recursive)
+    if not image_list:
+        print("No images provided. Closing...")
+        sys.exit(1)
+
+    run_image_mode(args, image_list)
 
 def optimize_file(file_path):
     cmd = f'"C:/Program Files/FileOptimizer/FileOptimizer64.exe" "{file_path}"'
@@ -493,264 +895,4 @@ def process_image(image, character_list, char_images, character_detail_level, di
 
 
 if __name__ == "__main__":
-    if not os.path.exists(os.path.join(characterize_path, "output")):
-        os.makedirs(os.path.join(characterize_path, "output"))
-    if not os.path.exists(os.path.join(characterize_path, "dict_characters")):
-        os.makedirs(os.path.join(characterize_path, "dict_characters"))
-
-    fonts = {
-        "ascii": "arial.ttf",
-        "arabic": "arial.ttf",
-        "braille": "seguisym.ttf",
-        "emoji": "seguiemj.ttf",
-        "chinese": "msyh.ttc",
-        "simple": "arial.ttf",
-        "numbers+": "arial.ttf",
-        "roman": "times.ttf",
-        "numbers": "arial.ttf",
-        "latin": "arial.ttf",
-        "hiragana": "msyh.ttc",
-        "katakana": "msyh.ttc",
-        "kanji": "msyh.ttc",
-        "cyrillic": "arial.ttf",
-        "hangul": "malgunbd.ttf",
-    }
-
-    languages = list(fonts.keys())
-
-    (
-        language,
-        complexity_level,
-        color,
-        image_src,
-        resize,
-        empty_char,
-        divide_image_flag,
-        output_format,
-        optimize,
-        tkinter,
-    ) = parse_arguments()
-
-    if not language or not language in languages:
-        language = choose_option("characters", sorted(languages))
-    if not complexity_level or not complexity_level in range(1, 41):
-        complexity_level = choose_value("complexity level", 1, 40)
-    if len(color) != 2 or not color[0]:
-        color = binary_choice("use color")
-    else:
-        color = color[1]
-    if not image_src:
-        image_src = input_files()
-    if not isinstance(resize, tuple) or not resize[0]:
-        choice = choose_value("character resolution", 1, 4000)
-        resize = (True, (choice, choice))
-    if not divide_image_flag[0]:
-        divide_image_flag = binary_choice("subdivide the image")
-    else:
-        divide_image_flag = divide_image_flag[1]
-    if len(empty_char) != 2 or not empty_char[0]:
-        empty_char = binary_choice("use an empty character to represent the darkest pixels")
-    else:
-        empty_char = empty_char[1]
-    if not output_format or not any(
-        x in ["png", "jpg", "txt"] for x in output_format.split()
-    ):
-        output_format = choose_option(
-            "file formats",
-            ["png", "jpg", "txt", "txt, png", "txt, jpg", "png, jpg", "png, jpg, txt"],
-        )
-    if not optimize[0]:
-        optimize = binary_choice("optimize the resulting images (when images <= 300)")
-    else:
-        optimize = optimize[1]
-
-    folder_name = f"output/{language}"
-
-    if not os.path.exists(os.path.join(characterize_path, folder_name)):
-        os.makedirs(os.path.join(characterize_path, folder_name))
-
-    if "txt" in output_format:
-        if not os.path.exists(os.path.join(characterize_path, f"output/{language}/text")):
-            os.makedirs(os.path.join(characterize_path, f"output/{language}/text"))
-
-    if not any(x in output_format for x in ("png", "jpg", "txt")):
-        output_format = "png"
-
-    image_list = []
-    valid_extensions = {'.jpg', '.jpeg', '.png', '.jfif', '.webp'}
-
-    for path in image_src:
-        path = path.strip()
-        if os.path.isdir(path):
-            for filename in os.listdir(path):
-                if any(filename.lower().endswith(ext) for ext in valid_extensions):
-                    image_list.append(os.path.join(path, filename))
-        else:
-            if any(path.lower().endswith(ext) for ext in valid_extensions):
-                image_list.append(path)
-
-    if not image_list:
-        print("No images provided. Closing...")
-        sys.exit()
-
-    # Determine character detail level based on language
-    detail_level = {
-        "braille": 16,
-        "hiragana": 15, "katakana": 15, "kanji": 15,
-        "chinese": 15, "hangul": 15, "arabic": 15
-    }.get(language, 12)
-
-    character_dict = characters.dict_caracteres
-
-    # Font paths to try
-    font_paths = [
-        fonts[language],
-        os.path.join(os.environ.get('LOCALAPPDATA', ''), 
-                    'Microsoft/Windows/Fonts', fonts[language])
-    ]
-
-    font = None
-    for font_path in font_paths:
-        try:
-            font = ImageFont.truetype(font_path, 10)
-            font_file = font_path
-            break
-        except OSError:
-            continue
-
-    if not font:
-        print(f"Error: Font {fonts[language]} for '{language}' not found")
-        sys.exit(1)
-
-    start_time = time.time()
-
-    # Generate cache filename
-    font_base = os.path.splitext(os.path.basename(fonts[language]))[0]
-    cache_filename = f"chars_{language}-{detail_level}-{complexity_level}-{font_base}{'-empty' if empty_char else ''}.list"
-    cache_path = os.path.join(characterize_path, "dict_characters", cache_filename)
-
-    # Try to load from cache first
-    if os.path.exists(cache_path):
-        with open(cache_path, 'rb') as f:
-            char_list_original = pickle.load(f)
-        char_list = [x[0] for x in char_list_original]
-        print(f"\nCharacter list loaded in {to_hours_minutes_seconds(time.time() - start_time)}")
-    else:
-        print("\nCreating character ranking by brightness levels...")
-        char_list_original = rank.create_ranking(
-            detail_level,
-            font=font_file,
-            list_size=complexity_level,
-            allowed_characters=character_dict[language]
-        )
-        
-        if empty_char:
-            char_list_original.append((" ", 0))
-            char_list_original.sort(key=lambda x: x[1])
-            char_list_original = char_list_original[:complexity_level]
-
-        # Save to cache
-        with open(cache_path, 'wb') as f:
-            pickle.dump(char_list_original, f)
-        
-        char_list = [x[0] for x in char_list_original]
-        print(f"Character list created in {round(time.time() - start_time, 2)} seconds\n")
-    t4 = time.time()
-    if any(x in output_format for x in ["jpg", "png"]):
-        char_images = create_char_image_dict(
-            char_list, detail_level, font_file, color
-        )
-        print(f"Characters dict created in {round(time.time()-t4, 2)} seconds.\n")
-    else:
-        char_images = False
-    t = os.cpu_count() // 2 if os.cpu_count() >= 2 else 1
-    num_iterations = len(image_list)
-    if len(char_list) <= 30:
-        print("Characters to use:", char_list_original, "\n")
-    print(
-        f"Processing {num_iterations} {'image' if num_iterations == 1 else 'images'}{' in '+str(math.ceil(num_iterations/t))+' cycles' if not t > num_iterations else ''}...",
-        end="\n\n",
-    )
-
-    t0 = time.time()
-
-    if num_iterations == 1:
-        internal_time = time.time()
-        results = []
-        for i, image in enumerate(image_list):
-            results.append(
-                process_routine(
-                    image,
-                    char_list,
-                    char_images,
-                    detail_level,
-                    divide_image_flag,
-                    output_format,
-                    resize,
-                    color,
-                    folder_name,
-                    tkinter,
-                )
-            )
-        if not tkinter:
-            print(f"Elapsed time: {to_hours_minutes_seconds(time.time()-internal_time)}")
-    else:
-        results = []
-        with ProcessPoolExecutor(max_workers=t) as executor:
-            futures = {executor.submit(
-                    process_image,
-                    image_list[i],
-                    char_list,
-                    char_images,
-                    detail_level,
-                    divide_image_flag,
-                    output_format,
-                    resize,
-                    color,
-                    folder_name,
-                    tkinter,
-            ): i for i in range(num_iterations)}
-            start_cycle = time.time()
-            batch_count = 0
-            processed_count = 0
-            for future in as_completed(futures):
-                processed_count += 1
-                batch_count += 1
-                results.append(future.result())
-                if batch_count == t or processed_count == num_iterations:
-                    cycle_time = time.time() - start_cycle
-                    avg_time = cycle_time / batch_count
-                    remaining = num_iterations - processed_count
-                    estimated_remaining = remaining * avg_time
-                    print(f"\rProcessed {processed_count}/{num_iterations} images. Batch cycle time: {round(cycle_time, 2)} sec. Estimated remaining: {to_hours_minutes_seconds(estimated_remaining)}", end="", flush=True)
-                    batch_count = 0
-                    start_cycle = time.time()
-            if not tkinter:
-                print(f"Total execution time: {to_hours_minutes_seconds(time.time() - t0)}")
-
-    output_format = [
-        x.replace(",", "").replace(".", "").replace(";", "")
-        for x in output_format.split()
-        if any(z in x for z in ["png", "jpg", "txt"])
-    ]
-
-    results = [
-        item
-        for sublist in [[r + f".{f}" for r in results] for f in output_format]
-        for item in sublist
-    ]
-
-    if optimize and len(results) <= 300:
-        if os.path.exists("C:/Program Files/FileOptimizer/FileOptimizer64.exe"):
-            print("\n\nOptimizing files in the background...")
-            optimize_files(results, t)
-            print("File optimization completed.")
-        else:
-            print("\nFileOptimizer not found. Skipping optimization...")
-    else:
-        print("\nBypassing file optimization...")
-
-    print(
-        "\n"
-        + f"All done. Characterized images can be found in {os.path.join(characterize_path, folder_name)}."
-    )
+    main()

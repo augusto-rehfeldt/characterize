@@ -4,6 +4,7 @@ import os
 import subprocess
 from PIL import Image, UnidentifiedImageError
 from charlib.image_utils import get_chars, sample_colors
+from charlib.terminal import render_terminal_image
 import rank
 import characters
 import tempfile
@@ -447,29 +448,23 @@ class VideoPlayer:
             if cv2 is None:
                 raise RuntimeError("OpenCV is required to render video frames.")
             pil_img = Image.fromarray(cv2.cvtColor(frame_to_render, cv2.COLOR_BGR2RGB))
+        if self.args.terminal:
+            render_terminal_image(
+                pil_img,
+                self.char_list,
+                self.target_w_chars,
+                self.target_h_chars,
+                color=self.args.color,
+                true_color=self.args.true_color,
+            )
+            return
         img_resized_for_ascii = pil_img.resize((self.target_w_chars, self.target_h_chars))
         color_data_grid = None
         if self.args.color or self.args.true_color:
             source_for_color = pil_img if self.args.true_color else img_resized_for_ascii
             color_data_grid = sample_colors(source_for_color, self.target_w_chars, self.target_h_chars)
         _, out_txt_list = get_chars(img_resized_for_ascii, self.char_list, None, fmt="txt", color=False)
-        if self.args.terminal:
-            self._render_terminal(out_txt_list, color_data_grid)
-        else:
-            self._render_pygame(out_txt_list, color_data_grid)
-
-    def _render_terminal(self, out_txt_list, color_data_grid):
-        self.clear_screen()
-        for y, line_str in enumerate(out_txt_list):
-            output_line = []
-            for x, char_val in enumerate(line_str):
-                if color_data_grid is not None:
-                    r, g, b = color_data_grid[y, x]
-                    output_line.append(self.rgb_to_ansi(r, g, b) + char_val)
-                else:
-                    output_line.append(char_val)
-            sys.stdout.write("".join(output_line) + self.reset_ansi_color() + "\n")
-        sys.stdout.flush()
+        self._render_pygame(out_txt_list, color_data_grid)
 
     def _render_pygame(self, out_txt_list, color_data_grid):
         if self.screen and self.font:
@@ -574,20 +569,7 @@ class VideoPlayer:
                 pygame.quit()
 
     @staticmethod
-    def clear_screen():
-        sys.stdout.write("\x1b[2J\x1b[H")
-        sys.stdout.flush()
-
-    @staticmethod
     def format_time(seconds):
         minutes = int(seconds // 60)
         seconds = int(seconds % 60)
         return f"{minutes:02d}:{seconds:02d}"
-
-    @staticmethod
-    def rgb_to_ansi(r, g, b):
-        return f"\033[38;2;{r};{g};{b}m"
-
-    @staticmethod
-    def reset_ansi_color():
-        return "\033[0m"
