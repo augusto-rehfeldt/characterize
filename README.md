@@ -1,39 +1,175 @@
-To run the command line image tooling, use:
+# Characterize
+
+Characterize turns images into character art and can also play video as ASCII in the terminal or in a window.
+
+## Entry Point
+
+Use `characterize.py` as the main command:
 
 ```bash
 python characterize.py [arguments]
 ```
 
-To run the video / terminal playback tool, use:
+`characterize_video.py` remains as a compatibility wrapper for older scripts. It forwards to `characterize.py --video`.
+
+## Install
 
 ```bash
-python characterize_video.py [arguments]
+pip install -r requirements.txt
 ```
 
-`characterize_video.py` supports a `--terminal` flag that prints the output directly in the terminal instead of opening a window.
-It also automatically switches to terminal mode for still-image inputs.
-
-Arguments:
-  - (-i, --i) -> input file paths MANY ["path1", "path2", ...]
-  - (-cr, --cr') -> character resolution parameter ONE (1 to 4000) [THe image will be automatically divided around the 800-1000                      characters resolution mark]
-  - (-cl, --cl) -> complexity level parameter ONE (1 to 40)
-  - (-l, --l) -> language parameter ONE [ascii, chinese, ...] [Available languages: "ascii", "arabic", "braille", "emoji", "chinese", "simple", "numbers+", "roman", "numbers", "latin", "hiragana", "katakana", "kanji", "cyrillic", "hangul"]
-  - (-d, --d) -> divide parameter ONE (true/false)
-  - (-c, --c) -> color parameter ONE (true/false)
-  - (-f, --f) -> format parameter MANY [png, jpg, txt]
-  - (-ec, --ec) -> empty character parameter ONE (true/false)
-  - (-o, --o) -> optimize parameter ONE (true/false) [for now, requires having FileOptimizer64.exe on C:/Program Files/FileOptimizer/]
-
-Pass them like "python [path to characterize.py] -i PATH -c false -o true" and so on. If you don't pass arguments, the program will ask you for the parameters using user inputs.
-
-Video playback examples:
+Video playback works best with `ffmpeg` installed:
 
 ```bash
-python characterize_video.py -i path/to/video.mp4 --terminal -W 80 --color
-python characterize_video.py -i path/to/image.png --terminal -W 80
+ffmpeg -version
 ```
 
----
+If `ffmpeg` is missing, Characterize can still play video, but audio support will be limited.
 
-Output:
+## Modes
 
+Characterize now uses one CLI with a few clear switches:
+
+`--terminal`
+: Render output directly in the terminal.
+
+`--video`
+: Force video playback mode.
+
+Auto mode:
+: When the input is a still image, Characterize previews it in the terminal automatically.
+
+## Quick Start
+
+Preview a single image in the terminal:
+
+```bash
+python characterize.py -i path/to/image.png --terminal -W 80
+```
+
+Export a folder of images to output files:
+
+```bash
+python characterize.py -i path/to/folder -f png,txt -l ascii -C 12
+```
+
+Play a video in the terminal:
+
+```bash
+python characterize.py -i path/to/video.mp4 --video --terminal -W 80 --color
+```
+
+Play a video in a window:
+
+```bash
+python characterize.py -i path/to/video.mp4 --video -W 100 -H 45
+```
+
+Use the compatibility wrapper if an older script still calls it:
+
+```bash
+python characterize_video.py -i path/to/video.mp4 --terminal
+```
+
+## Video UI
+
+Windowed video mode includes playback controls at the bottom of the window:
+
+`Space`
+: Pause or resume playback.
+
+`Left` / `Right`
+: Seek backward or forward by 5 seconds.
+
+`+` / `-`
+: Adjust volume.
+
+`F`
+: Toggle fullscreen.
+
+`1` / `2` / `3`
+: Switch between preset window sizes.
+
+`C`
+: Toggle color rendering.
+
+`T`
+: Toggle true-color rendering.
+
+The timeline shows current time, total time, and playback progress. You can click or drag on the timeline to seek.
+
+## Arguments
+
+`-i`, `--input`
+: Input files or folders. Multiple values are allowed.
+
+`-W`, `--width`
+: Output width in characters.
+
+`-H`, `--height`
+: Output height in characters. If omitted, height is derived from the input aspect ratio.
+
+`-l`, `--language`
+: Character set to use.
+
+`-C`, `--complexity`
+: Number of characters to keep in the palette.
+
+`--empty`
+: Include a blank character for darker areas.
+
+`-c`, `--color`
+: Enable color output.
+
+`--true-color`
+: Use actual pixel colors instead of palette-based brightness sampling.
+
+`--terminal`
+: Render in the terminal instead of the windowed player.
+
+`--video`
+: Force video mode.
+
+`-f`, `--format`
+: Image output format for image mode. Supported values: `png`, `jpg`, `txt`.
+
+`-d`, `--divide`
+: Subdivide large images before processing.
+
+`-o`, `--optimize`
+: Optimize generated image files when possible.
+
+`--recursive`
+: Scan input folders recursively.
+
+## Output
+
+Image mode writes files under:
+
+```text
+output/<language>/
+```
+
+Text output is written alongside the image outputs when `txt` is selected.
+
+## Examples
+
+High-contrast terminal preview:
+
+```bash
+python characterize.py -i poster.png --terminal -W 120 -l braille -C 16 --color
+```
+
+Batch export with text and PNG:
+
+```bash
+python characterize.py -i ./photos -f png,txt -l ascii -C 12 --recursive
+```
+
+Video playback with true color:
+
+```bash
+python characterize.py -i concert.mp4 --video --terminal -W 100 --true-color
+```
+
+If you want the same command to work on both an image and a video, just pass the input and let Characterize choose the mode. Still images preview in the terminal, and video uses the player unless you override it.
