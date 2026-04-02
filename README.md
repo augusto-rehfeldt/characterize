@@ -1,4 +1,17 @@
-To run the command line version, for now use "python [path to characterize.py] (arguments)"
+To run the command line image tooling, use:
+
+```bash
+python characterize.py [arguments]
+```
+
+To run the video / terminal playback tool, use:
+
+```bash
+python characterize_video.py [arguments]
+```
+
+`characterize_video.py` supports a `--terminal` flag that prints the output directly in the terminal instead of opening a window.
+It also automatically switches to terminal mode for still-image inputs.
 
 Arguments:
   - (-i, --i) -> input file paths MANY ["path1", "path2", ...]
@@ -12,6 +25,13 @@ Arguments:
   - (-o, --o) -> optimize parameter ONE (true/false) [for now, requires having FileOptimizer64.exe on C:/Program Files/FileOptimizer/]
 
 Pass them like "python [path to characterize.py] -i PATH -c false -o true" and so on. If you don't pass arguments, the program will ask you for the parameters using user inputs.
+
+Video playback examples:
+
+```bash
+python characterize_video.py -i path/to/video.mp4 --terminal -W 80 --color
+python characterize_video.py -i path/to/image.png --terminal -W 80
+```
 
 ---
 

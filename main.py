@@ -5,27 +5,15 @@ import threading
 import time
 import copy
 
-python = sys.executable if not "python.exe" in os.listdir(
-) else os.path.join(os.path.realpath(os.path.dirname(__file__)), 'python.exe')
-
-try:
-    import copy
-except ImportError:
-    subprocess.run(
-        f"{python} -m pip install copy")
-    import copy
+python = sys.executable
 
 try:
     import tkinter as tk
     import tkinter.ttk as ttk
-except ImportError:
-    subprocess.run(
-        f"{python} -m pip install tkinter")
-    import tkinter as tk
-    import tkinter.ttk as ttk
-finally:
     import tkinter.filedialog as filedialog
     from tkinter import messagebox
+except ImportError as exc:
+    raise ImportError("tkinter is required to run the GUI") from exc
 
 
 def find_lowest_value(numbers: list) -> int:

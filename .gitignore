@@ -8,3 +8,6 @@
 **/__pycache__
 .aider*
 .env
+.roomodes
+frames_to_video.py
+video_to_frames.py
