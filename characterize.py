@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, ImageFont, ImageDraw, ImageEnhance, UnidentifiedImageError
 
 from charlib.terminal import render_terminal_image
+from charlib.player import VideoPlayer
 
 
 characterize_path = os.path.realpath(os.path.dirname(__file__))
