@@ -51,6 +51,7 @@ def process_routine(
     for im in image_list:
         im = ImageEnhance.Color(im).enhance(2)
         chars_img, chars_txt = get_chars(im, character_list, char_images, output_format, color=color)
+        saved_filename = None
 
         if "txt" in output_format:
             name = image_name.replace("\\", "/")
@@ -59,6 +60,7 @@ def process_routine(
                 "".join(name.split("/")[-1].split(".")[:-1]) + ".txt",
             )
             save_text(chars_txt, filename)
+            saved_filename = filename
             if tkinter:
                 print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
 
@@ -94,6 +96,9 @@ def process_routine(
                 ext = ".png" if "png" in output_format else ".jpg"
                 print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+ext}>>")
             return filename
+
+        if saved_filename:
+            return saved_filename
 
 def process_image(image, character_list, char_images,
                   character_detail_level, divide_image_flag,

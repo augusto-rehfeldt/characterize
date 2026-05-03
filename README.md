@@ -18,13 +18,20 @@ python characterize.py [arguments]
 pip install -r requirements.txt
 ```
 
-Video playback works best with `ffmpeg` installed:
+Run smoke checks:
+
+```bash
+python smoke_test.py
+```
+
+Video playback works best with `ffmpeg` installed. Terminal audio also needs `ffplay`, which is usually included with full ffmpeg installs:
 
 ```bash
 ffmpeg -version
+ffplay -version
 ```
 
-If `ffmpeg` is missing, Characterize can still play video, but audio support will be limited.
+If `ffmpeg` or `ffplay` is missing, Characterize can still play video, but audio support will be limited.
 
 ## Modes
 
@@ -35,6 +42,9 @@ Characterize now uses one CLI with a few clear switches:
 
 `--video`
 : Force video playback mode.
+
+`--no-audio`
+: Disable video audio playback.
 
 Auto mode:
 : When the input is a still image, Characterize previews it in the terminal automatically.
@@ -57,6 +67,12 @@ Play a video in the terminal:
 
 ```bash
 python characterize.py -i path/to/video.mp4 --video --terminal -W 80 --color
+```
+
+Play a video in the terminal without audio:
+
+```bash
+python characterize.py -i path/to/video.mp4 --video --terminal --no-audio -W 80 --color
 ```
 
 Play a video in a window:
@@ -95,6 +111,10 @@ Windowed video mode includes playback controls at the bottom of the window:
 
 `T`
 : Toggle true-color rendering.
+
+## Troubleshooting
+
+PowerShell may print an execution-policy warning if your user profile script is blocked. Characterize does not need that profile script; run project commands from `powershell -NoProfile` or update the local PowerShell execution policy if you want to remove the warning.
 
 The timeline shows current time, total time, and playback progress. You can click or drag on the timeline to seek.
 

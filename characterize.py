@@ -6,8 +6,7 @@ import sys
 import time
 import math
 import pickle
-import subprocess
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import argparse
 import re
@@ -18,6 +17,7 @@ from PIL import Image, ImageFont, ImageDraw, ImageEnhance, UnidentifiedImageErro
 
 from charlib.terminal import render_terminal_image
 from charlib.player import VideoPlayer
+from charlib.file_utils import optimize_files
 
 
 characterize_path = os.path.realpath(os.path.dirname(__file__))
@@ -214,8 +214,8 @@ def save_image(image, format, color, filename, max_attempts=10):
 
 
 def save_text(characters, filename):
-    with open(filename, "w") as f:
-        f.writelines([" ".join(line) + "\n" for line in characters])
+    with open(filename, "w", encoding="utf-8") as f:
+        f.writelines(["".join(line) + "\n" for line in characters])
 
 
 def process_routine(
@@ -272,6 +272,7 @@ def process_routine(
     for im in image_list:
         im = ImageEnhance.Color(im).enhance(2)
         characters_output = get_chars(im, character_list, char_images, output_format, color=color)
+        saved_filename = None
 
         # If saving as text
         if "txt" in output_format:
@@ -281,6 +282,7 @@ def process_routine(
                 "".join(image_name.split("/")[-1].split(".")[:-1]) + ".txt",
             )
             save_text(characters_output[1], filename)
+            saved_filename = filename
             if tkinter:
                 print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
 
@@ -364,6 +366,9 @@ def process_routine(
                 )
 
             return filename
+
+        if saved_filename:
+            return saved_filename
 
 
 def input_files(text=True):
@@ -498,6 +503,11 @@ def build_parser():
         help="Force video playback mode",
     )
     parser.add_argument(
+        "--no-audio",
+        action="store_true",
+        help="Disable audio during video playback",
+    )
+    parser.add_argument(
         "-f",
         "--format",
         "--f",
@@ -527,7 +537,16 @@ def build_parser():
 
 
 def parse_arguments(argv=None):
-    return build_parser().parse_args(argv)
+    args = build_parser().parse_args(argv)
+    if args.width <= 0:
+        raise SystemExit("Error: --width must be a positive integer.")
+    if args.height is not None and args.height <= 0:
+        raise SystemExit("Error: --height must be a positive integer.")
+    if args.complexity <= 0:
+        raise SystemExit("Error: --complexity must be a positive integer.")
+    if args.framerate is not None and args.framerate <= 0:
+        raise SystemExit("Error: --framerate must be a positive number.")
+    return args
 
 
 def is_image_file(path):
@@ -830,6 +849,7 @@ def run_video_mode(args, input_path):
         color=args.color,
         terminal=args.terminal,
         true_color=args.true_color,
+        no_audio=args.no_audio,
     )
     player = VideoPlayer(video_args)
     player.run()
@@ -869,16 +889,6 @@ def main(argv=None):
         sys.exit(1)
 
     run_image_mode(args, image_list)
-
-def optimize_file(file_path):
-    cmd = f'"C:/Program Files/FileOptimizer/FileOptimizer64.exe" "{file_path}"'
-    subprocess.run(cmd, shell=True, check=True)
-
-
-def optimize_files(files, num_threads):
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        executor.map(optimize_file, files)
-
 
 def process_image(image, character_list, char_images, character_detail_level, divide_image_flag, output_format, resize, color, folder_name, tkinter):
     return process_routine(

@@ -2,12 +2,14 @@ import time
 import sys
 import os
 import subprocess
+import shutil
 from PIL import Image, UnidentifiedImageError
 from charlib.image_utils import get_chars, sample_colors
 from charlib.terminal import render_terminal_image
 import rank
 import characters
 import tempfile
+import atexit
 
 try:
     import cv2
@@ -71,6 +73,7 @@ class VideoPlayer:
         self.frame_count = 0
         self.audio_loaded = False
         self.temp_audio_path = None
+        self.audio_process = None
         self.button_hover = False
         self.dragging_volume = False
         self.dragging_timeline = False
@@ -227,6 +230,42 @@ class VideoPlayer:
             self.volume_icon = None
             print(f"Warning: Failed to load volume_icon.png: {e}. Volume slider will appear without icon.")
 
+    def _start_audio(self):
+        if getattr(self.args, "no_audio", False):
+            return
+        if self.args.terminal:
+            self._start_terminal_audio()
+        else:
+            self._extract_audio()
+
+    def _start_terminal_audio(self):
+        if self.is_image_input:
+            return
+
+        if not shutil.which("ffplay"):
+            print("Warning: ffplay not found. Install ffmpeg with ffplay for terminal audio support. Video will play without sound.")
+            return
+
+        try:
+            self.audio_process = subprocess.Popen(
+                [
+                    "ffplay",
+                    "-nodisp",
+                    "-autoexit",
+                    "-loglevel",
+                    "error",
+                    self.args.input,
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            self.audio_loaded = True
+            atexit.register(self._stop_audio)
+        except Exception as e:
+            self.audio_process = None
+            print(f"Warning: Could not start terminal audio. Video will play without sound.\n{e}")
+
     def _extract_audio(self):
         if self.is_image_input:
             return
@@ -262,7 +301,6 @@ class VideoPlayer:
                 pygame.mixer.music.load(self.temp_audio_path)
                 pygame.mixer.music.play()
                 self.audio_loaded = True
-                import atexit
                 atexit.register(self._cleanup_audio)
             except subprocess.CalledProcessError as e:
                 print(f"Warning: Audio extraction failed (ffmpeg error). Video will play without sound.\nError: {e.stderr.decode('utf-8') if e.stderr else str(e)}")
@@ -279,6 +317,16 @@ class VideoPlayer:
                 os.unlink(self.temp_audio_path)
         except Exception as e:
             print(f"Warning: Could not delete temp audio file {self.temp_audio_path}: {e}")
+
+    def _stop_audio(self):
+        if self.audio_process is not None and self.audio_process.poll() is None:
+            self.audio_process.terminate()
+            try:
+                self.audio_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.audio_process.kill()
+                self.audio_process.wait(timeout=2)
+        self.audio_process = None
 
     def _handle_events(self):
         for event in pygame.event.get():
@@ -528,7 +576,7 @@ class VideoPlayer:
 
         if not self.args.terminal:
             self._init_pygame()
-        self._extract_audio()
+        self._start_audio()
         running = True
         try:
             while running:
@@ -563,9 +611,11 @@ class VideoPlayer:
         finally:
             if self.cap is not None:
                 self.cap.release()
-            if self.audio_loaded and pygame is not None:
+            if self.audio_process is not None:
+                self._stop_audio()
+            if self.audio_loaded and pygame is not None and not self.args.terminal:
                 pygame.mixer.music.stop()
-            if pygame is not None:
+            if pygame is not None and not self.args.terminal:
                 pygame.quit()
 
     @staticmethod
