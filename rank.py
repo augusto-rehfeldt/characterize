@@ -1,17 +1,7 @@
 import math
 import sys
-import subprocess
-import importlib
 
-def install_and_import(package):
-    try:
-        return importlib.import_module(package)
-    except ImportError:
-        subprocess.run([sys.executable, "-m", "pip", "install", package], check=True)
-        return importlib.import_module(package)
-
-np = install_and_import('numpy')
-PIL = install_and_import('PIL.Image')
+import numpy as np
 from PIL import Image, ImageFont, ImageDraw
 
 def diss_index(characters):
@@ -22,11 +12,7 @@ def diss_index(characters):
     min_color_level = colors[0]
     max_color_level = colors[-1]
     step_sizes = [abs(c1 - c2) for c1, c2 in zip(colors[:-1], colors[1:])]
-    try:
-        median_step_size = np.median(step_sizes)
-    except AttributeError:
-        subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "numpy"], check=True)
-        median_step_size = np.median(step_sizes)
+    median_step_size = np.median(step_sizes)
     dissimilarity_index = round(median_step_size / (max_color_level - min_color_level), 3)
     return dissimilarity_index
 

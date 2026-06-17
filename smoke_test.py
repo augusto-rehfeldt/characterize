@@ -87,7 +87,6 @@ def main():
                 "py_compile",
                 "characterize.py",
                 "charlib/player.py",
-                "charlib/processing.py",
                 "charlib/file_utils.py",
             ]
         )

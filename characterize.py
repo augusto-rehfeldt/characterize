@@ -169,7 +169,7 @@ def divide_image(image, min_size):
     return image_list
 
 
-def save_image(image, format, color, filename, max_attempts=10):
+def save_image(image, format, color, filename):
     save_options = {
         "png": {"format": "PNG", "compress_level": 9},
         "jpg": {"format": "JPEG", "quality": 95},
@@ -177,40 +177,15 @@ def save_image(image, format, color, filename, max_attempts=10):
 
     for fmt in ["png", "jpg"]:
         if fmt in format:
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    # Ensure the image is in RGB mode
-                    if image.mode != "RGB":
-                        image = image.convert("RGB")
-
-                    # Apply color quantization if needed
-                    if color and fmt == "png":
-                        image = image.quantize(colors=256)
-
-                    # Save the image
-                    image.save(f"{filename}.{fmt}", **save_options[fmt])
-
-                    # Verify the saved image
-                    with Image.open(f"{filename}.{fmt}") as img:
-                        img.verify()
-
-                    break  # Exit the loop if successful
-                except Exception as e:
-                    attempt += 1
-                    if attempt < max_attempts:
-                        time.sleep(1)  # Wait a bit before retrying
-                    else:
-                        # If all attempts fail, try to save as a different format
-                        try:
-                            backup_format = "jpg" if fmt == "png" else "png"
-                            image.save(
-                                f"{filename}_backup.{backup_format}",
-                                **save_options[backup_format],
-                            )
-                            print(f"Saved backup as {filename}_backup.{backup_format}")
-                        except Exception as backup_e:
-                            print(f"Failed to save backup: {str(backup_e)}")
+            try:
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+                if color and fmt == "png":
+                    image = image.quantize(colors=256)
+                image.save(f"{filename}.{fmt}", **save_options[fmt])
+            except Exception as e:
+                print(f"Failed to save {filename}.{fmt}: {e}")
+                raise
 
 
 def save_text(characters, filename):
@@ -777,7 +752,7 @@ def run_image_mode(args, image_list):
         with ProcessPoolExecutor(max_workers=t) as executor:
             futures = {
                 executor.submit(
-                    process_image,
+                    process_routine,
                     image_list[i],
                     char_list,
                     char_images,
@@ -889,20 +864,6 @@ def main(argv=None):
         sys.exit(1)
 
     run_image_mode(args, image_list)
-
-def process_image(image, character_list, char_images, character_detail_level, divide_image_flag, output_format, resize, color, folder_name, tkinter):
-    return process_routine(
-        image,
-        character_list,
-        char_images,
-        character_detail_level,
-        divide_image_flag,
-        output_format,
-        resize,
-        color,
-        folder_name,
-        tkinter,
-    )
 
 
 if __name__ == "__main__":

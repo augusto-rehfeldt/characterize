@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 import copy
+from pathlib import Path
 
 python = sys.executable
 
@@ -35,18 +36,7 @@ def to_hours_minutes_seconds(seconds: float) -> str:
     return "%dh:%02dm:%02ds" % (h, m, s)
 
 
-def return_recursive(folder_path: str) -> list:
-    files = []
-    try:
-        for item in os.listdir(folder_path):
-            if os.path.isfile(os.path.join(folder_path, item)):
-                files.append(os.path.join(folder_path, item))
-            elif os.path.isdir(os.path.join(folder_path, item)):
-                files += return_recursive(os.path.join(folder_path, item))
-    except FileNotFoundError:
-        pass
-
-    return [x.replace("\\", "/") for x in files]
+# ponytail: return_recursive folded into Path.rglob at the call sites.
 
 
 class App:
@@ -343,7 +333,7 @@ class App:
         folder = filedialog.askdirectory(
             initialdir='/', title='Select a folder',)
 
-        files = return_recursive(folder)
+        files = [str(p).replace("\\", "/") for p in Path(folder).rglob('*') if p.is_file()]
 
         filenames = sorted([x for x in files if not x in tree_filenames and any(
             x.lower().endswith(y) for y in [".png", ".jpg", ".jfif", ".jpeg", ".webp"])])
@@ -487,7 +477,7 @@ class App:
             if output_path:
                 if os.path.isdir(output_path):
                     # Check if all files in the directory are added
-                    if len([x for x in self.tree.get_children() if self.tree.item(x)['values'][-1] == output_path]) == len(return_recursive(output_path)):
+                    if len([x for x in self.tree.get_children() if self.tree.item(x)['values'][-1] == output_path]) == len([p for p in Path(output_path).rglob('*') if p.is_file()]):
                         folder_paths.add(output_path)
                     else:
                         individual_files.append(self.tree.item(line)['values'][0])

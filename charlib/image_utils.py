@@ -1,4 +1,3 @@
-import time
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
 
@@ -129,11 +128,7 @@ def unite_image(chars, orig_w, orig_h, detail):
                     print(f"Warning: Cell at ({i},{j}) with shape {cell.shape} could not be placed. Error: {ex}")
         return final
 
-    # Check if the array has the expected 5 dimensions
-    if char_array.ndim != 5 or char_array.shape[4] != 4:
-        print(f"Warning: Unexpected array dimension {char_array.ndim}. Falling back to slow method.")
-        # Fallback to the original slow method if dimensions are not as expected
-        return unite_image_slow_fallback(chars, orig_w, orig_h, detail)
+    # ponytail: create_char_image always yields (detail, detail, 4), so ndim==5 holds; no fallback branch needed.
 
     # Reshape and transpose to combine the character images
     # 1. Transpose to (orig_h, detail, orig_w, detail, 4)
@@ -141,22 +136,6 @@ def unite_image(chars, orig_w, orig_h, detail):
     final_image = char_array.transpose(0, 2, 1, 3, 4).reshape(orig_h * detail, orig_w * detail, 4)
     
     return final_image
-
-def unite_image_slow_fallback(chars, orig_w, orig_h, detail):
-    # This is the original, slower implementation for robustness
-    h = orig_h * detail
-    w = orig_w * detail
-    final = np.zeros((h, w, 4), dtype=np.uint8)
-    for j in range(orig_h):
-        for i in range(orig_w):
-            cell = chars[j][i]
-            y0, y1 = j * detail, (j + 1) * detail
-            x0, x1 = i * detail, (i + 1) * detail
-            try:
-                final[y0:y1, x0:x1] = cell[:detail, :detail]
-            except Exception:
-                print(f"Warning: size mismatch at ({i},{j})")
-    return final
 
 def sample_colors(img, width, height):
     """
@@ -207,34 +186,22 @@ def divide_image(image, min_size):
         parts = new_parts
     return parts
 
-def save_image(image, fmt, color, filename, max_attempts=10):
+def save_image(image, fmt, color, filename):
     opts = {
         "png": {"format": "PNG", "compress_level": 9},
         "jpg": {"format": "JPEG", "quality": 95},
     }
     for ext in ("png", "jpg"):
         if ext in fmt:
-            attempt = 0
-            while attempt < max_attempts:
-                try:
-                    if image.mode != "RGB":
-                        image = image.convert("RGB")
-                    if color and ext == "png":
-                        image = image.quantize(colors=256)
-                    image.save(f"{filename}.{ext}", **opts[ext])
-                    with Image.open(f"{filename}.{ext}") as im:
-                        im.verify()
-                    break
-                except Exception:
-                    attempt += 1
-                    time.sleep(1)
-            else:
-                backup = "jpg" if ext == "png" else "png"
-                try:
-                    image.save(f"{filename}_backup.{backup}", **opts[backup])
-                    print(f"Saved backup as {filename}_backup.{backup}")
-                except Exception as e:
-                    print(f"Failed to save backup: {e}")
+            try:
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+                if color and ext == "png":
+                    image = image.quantize(colors=256)
+                image.save(f"{filename}.{ext}", **opts[ext])
+            except Exception as e:
+                print(f"Failed to save {filename}.{ext}: {e}")
+                raise
 
 def save_text(chars, filename, color=False):
     # Note: Saving color text with ANSI codes to a file might not be ideal
