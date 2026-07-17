@@ -1,0 +1,53 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: flex; justify-content: center;
+  background: #0d1117; color: #e6edf3; font-family: system-ui, sans-serif;
+  padding: 2rem 1rem;
+}
+.card {
+  width: min(960px, 100%); background: #161b22;
+  border: 1px solid #30363d; border-radius: 12px; padding: 1.5rem 2rem 2rem;
+}
+h1 { margin: 0; font-size: 1.6rem; }
+.tag {
+  font-size: .7rem; vertical-align: super; background: #1f6feb;
+  border-radius: 6px; padding: .15em .5em;
+}
+.sub { color: #8b949e; margin-top: .3rem; }
+
+#drop {
+  margin-top: 1rem; border: 2px dashed #30363d; border-radius: 10px;
+  padding: 1.6rem; text-align: center; cursor: pointer; transition: border-color .15s;
+}
+#drop:hover, #drop.over { border-color: #58a6ff; }
+
+.controls {
+  display: flex; flex-wrap: wrap; gap: .8rem 1.2rem;
+  margin-top: 1.2rem; align-items: center;
+}
+.controls label { display: flex; align-items: center; gap: .4rem; font-size: .9rem; color: #8b949e; }
+.controls input[type="number"], .controls select {
+  width: 4.5em; background: #0d1117; border: 1px solid #30363d;
+  border-radius: 6px; color: #e6edf3; padding: .3em .5em;
+}
+.controls select { width: auto; }
+.check { color: #e6edf3; }
+
+.actions { display: flex; gap: .6rem; margin-top: 1.2rem; }
+button {
+  background: #238636; border: 0; border-radius: 8px; color: #fff;
+  padding: .55em 1.2em; font-size: .95rem; cursor: pointer;
+}
+button:disabled { opacity: .4; cursor: default; }
+button.ghost { background: #21262d; border: 1px solid #30363d; }
+
+.progress { height: 6px; background: #21262d; border-radius: 3px; margin-top: 1.2rem; overflow: hidden; }
+#bar { height: 100%; width: 0; background: #1f6feb; transition: width .1s; }
+#msg { color: #8b949e; font-size: .85rem; min-height: 1.2em; }
+
+.panels { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-top: .5rem; }
+figure { margin: 0; }
+figcaption { color: #8b949e; font-size: .8rem; margin-top: .4rem; }
+#src { max-width: 320px; border-radius: 8px; display: block; }
+#out { background: #000; border-radius: 8px; max-width: 100%; }

@@ -155,6 +155,15 @@ The timeline shows current time, total time, and playback progress. You can clic
 `--recursive`
 : Scan input folders recursively.
 
+`--browser`
+: Open browser mode: a web page where you upload an image and watch it get
+characterized row by row in real time. The app is fully client-side (character
+ranking and image mapping run in the browser); it lives in `docs/` as plain
+`index.html` + `style.css` + `app.js`, so it can also be opened directly as a file
+or served by any static file host. `python browser_mode.py` is just a convenience
+static server. It is hosted at <https://augusto-rehfeldt.github.io/characterize/>
+via GitHub Pages.
+
 ## Output
 
 Image mode writes files under:

@@ -1,7 +1,10 @@
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -178,6 +181,53 @@ def main():
             print("tk protocol markers missing from stdout")
             print(tk_protocol.stdout)
             raise SystemExit(1)
+
+        browser = subprocess.Popen(
+            [sys.executable, "browser_mode.py"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            first_line = browser.stdout.readline()
+            match = re.search(r"http://\S+", first_line)
+            if not match:
+                print(f"browser mode did not print a URL, got: {first_line!r}")
+                raise SystemExit(1)
+            base_url = match.group(0)
+
+            for path, marker in (
+                ("/", b"<canvas"),
+                ("/app.js", b"CHARSETS"),
+                ("/style.css", b".card"),
+            ):
+                with urllib.request.urlopen(base_url + path, timeout=10) as response:
+                    if response.status != 200 or marker not in response.read():
+                        print(f"browser mode static check failed for {path}")
+                        raise SystemExit(1)
+        finally:
+            browser.terminate()
+
+        if shutil.which("node"):
+            node_check = run_command(
+                [
+                    "node",
+                    "-e",
+                    "const m = require('./docs/app.js');"
+                    "const g = m.grayFromRgba([255,255,255,255, 0,0,0,255]);"
+                    "if (g[0] !== 1 || g[1] !== 0) throw new Error('grayFromRgba');"
+                    "if (m.percentile([0, 0.5, 1], 90) !== 0.9) throw new Error('percentile');"
+                    "const a = m.amplifyGray(new Float64Array([0.5]), 0.5);"
+                    "if (a[0] !== 0.5) throw new Error('amplifyGray');"
+                    "if (m.mapIndex(0.99, 12) !== 11 || m.mapIndex(0, 12) !== 0) throw new Error('mapIndex');"
+                    "const cs = m.buildCharset([['a',0],['b',10],['c',20],['d',30]], 2, false);"
+                    "if (cs.length !== 2 || cs[0] !== 'a') throw new Error('buildCharset');"
+                    "const cse = m.buildCharset([['a',0],['b',10],['c',20],['d',30]], 2, true);"
+                    "if (cse[0] !== ' ') throw new Error('buildCharset empty');",
+                ]
+            )
+            assert_ok(node_check, "browser app logic check (node)")
 
         if make_video(video_path):
             video_preview = run_command(

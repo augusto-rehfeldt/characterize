@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Characterize</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<main class="card">
+  <h1>Characterize <span class="tag">live</span></h1>
+  <p class="sub">Turn images into character art &mdash; fully client-side, nothing leaves your machine.</p>
+
+  <div id="drop" tabindex="0">
+    <p><strong>Drop an image here</strong> or click to browse</p>
+    <input type="file" id="file" accept="image/*" hidden>
+  </div>
+
+  <div class="controls">
+    <label>Width <input id="w" type="number" value="80" min="1" max="500"></label>
+    <label>Height <input id="h" type="number" placeholder="auto" min="1" max="500"></label>
+    <label>Complexity <input id="c" type="number" value="12" min="1" max="100"></label>
+    <label>Charset <select id="l"></select></label>
+    <label class="check"><input id="color" type="checkbox"> color</label>
+    <label class="check"><input id="empty" type="checkbox"> empty char</label>
+  </div>
+
+  <div class="actions">
+    <button id="go" disabled>Characterize</button>
+    <button id="dl" class="ghost" disabled>Download PNG</button>
+    <button id="copy" class="ghost" disabled>Copy text</button>
+  </div>
+
+  <div class="progress"><div id="bar"></div></div>
+  <p id="msg">pick an image to start</p>
+
+  <div class="panels">
+    <figure><img id="src" alt=""><figcaption>source</figcaption></figure>
+    <figure class="outwrap"><canvas id="out"></canvas><figcaption>characterized</figcaption></figure>
+  </div>
+</main>
+</body>
+</html>

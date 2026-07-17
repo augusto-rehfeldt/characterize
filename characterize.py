@@ -300,6 +300,11 @@ def build_parser():
         help="Scan folders recursively when collecting image inputs",
     )
     parser.add_argument(
+        "--browser",
+        action="store_true",
+        help="Start browser mode: a local page showing characterization live",
+    )
+    parser.add_argument(
         "--tk",
         "--tkinter",
         dest="tkinter",
@@ -624,6 +629,11 @@ def main(argv=None):
         os.makedirs(os.path.join(characterize_path, "dict_characters"))
 
     args = parse_arguments(argv)
+    if args.browser:
+        import browser_mode
+        browser_mode.serve()
+        return
+
     if not args.input:
         args.input = input_files()
 
