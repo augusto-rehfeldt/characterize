@@ -10,7 +10,6 @@ Use `characterize.py` as the main command:
 python characterize.py [arguments]
 ```
 
-`characterize_video.py` remains as a compatibility wrapper for older scripts. It forwards to `characterize.py --video`.
 
 ## Install
 
@@ -79,12 +78,6 @@ Play a video in a window:
 
 ```bash
 python characterize.py -i path/to/video.mp4 --video -W 100 -H 45
-```
-
-Use the compatibility wrapper if an older script still calls it:
-
-```bash
-python characterize_video.py -i path/to/video.mp4 --terminal
 ```
 
 ## Video UI

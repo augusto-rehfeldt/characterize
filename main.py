@@ -413,7 +413,7 @@ class App:
                                 'values'][:-3]+["", f"Completed in {res[1]} s", res[2]])
         children = self.tree.get_children()
         pct = round((len([x for x in children if "Completed" in self.tree.item(x)[
-                    'values'][-2]])/len(children))*100, 2)
+                    'values'][-2]])/len(children))*100, 2) if children else 0
         self.root.title(f"Characterize ({pct}% processed)")
         if "enable" in queue:
             self.cycle_buttons(False)
@@ -487,20 +487,26 @@ class App:
             else:
                 individual_files.append(self.tree.item(line)['values'][0])
 
-        base_command = f"""{python} {os.path.join(os.path.realpath(os.path.dirname(__file__)), 'characterize.py')}"""
-        
-        # Adding folders
-        for folder in folder_paths:
-            base_command += f' --i "{folder}"'
-
         script = self.language_cb.get().strip()
-        color = True if len(self.color_check.state()) > 0 else False
-        divide = True if len(self.divide_check.state()) > 0 else False
-        optimize = True if len(self.optimize_check.state()) > 0 else False
-        empty_char = True if len(self.empty_char_check.state()) > 0 else False
-        format = self.format_cb.get().strip()
+        format_arg = self.format_cb.get().strip()
 
-        base_command += f' --cr {value_a} --cl {value_b} --l {script} --c {color} --d {divide} --o {optimize} --f {format} --ec {empty_char} --tk true'
+        base_command = (
+            f'"{python}" "{os.path.join(os.path.realpath(os.path.dirname(__file__)), "characterize.py")}"'
+            f' --cr {value_a} --cl {value_b} --l {script} --f "{format_arg}" --tk'
+        )
+        if len(self.color_check.state()) > 0:
+            base_command += ' --c'
+        if len(self.divide_check.state()) > 0:
+            base_command += ' --d'
+        if len(self.optimize_check.state()) > 0:
+            base_command += ' --o'
+        if len(self.empty_char_check.state()) > 0:
+            base_command += ' --ec'
+
+        # Each job runs characterize once: one job per folder, then file chunks of 50
+        jobs = [f'{base_command} --i "{folder}"' for folder in sorted(folder_paths)]
+        for chunk in split_list(individual_files, 50):
+            jobs.append(base_command + ' --i ' + ' '.join(f'"{file}"' for file in chunk))
 
         self.cycle_buttons(True)
         self.label_generate["text"] = "Running engine..."
@@ -513,34 +519,33 @@ class App:
         for line in self.tree.get_children():
             self.tree.item(line, values=self.tree.item(line)['values'][:-3] + ["", "", ""])
 
-        # Split individual files into chunks of 50
-        file_chunks = list(split_list(individual_files, 50))
+        if not jobs:
+            self.cycle_buttons(False)
+            return False
 
-        # Track number of processed chunks
-        processed_chunks = [0]
+        # Track number of processed jobs
+        processed_jobs = [0]
 
-        def process_next_chunk(index):
-            if index < len(file_chunks):
-                files_str = ' '.join([f'"{file}"' for file in file_chunks[index]])
-                command = f'{base_command} --i {files_str}'
-                t = threading.Thread(target=run_thread, args=(command, lambda: on_chunk_complete(index + 1)), daemon=True)
+        def process_next_job(index):
+            if index < len(jobs):
+                t = threading.Thread(target=run_thread, args=(jobs[index], lambda: on_job_complete(index + 1)), daemon=True)
                 t.start()
             else:
-                # Re-enable buttons or perform other actions after all chunks are processed
+                # Re-enable buttons or perform other actions after all jobs are processed
                 self.cycle_buttons(False)
-                self.label_generate["text"] = f"Completed all {len(file_chunks)} chunks"
+                self.label_generate["text"] = f"Completed all {len(jobs)} jobs"
 
-        def on_chunk_complete(index):
-            processed_chunks[0] += 1
-            self.label_generate["text"] = f"Processing... {processed_chunks[0]} out of {len(file_chunks)} chunks completed"
-            if processed_chunks[0] >= len(file_chunks):
+        def on_job_complete(index):
+            processed_jobs[0] += 1
+            self.label_generate["text"] = f"Processing... {processed_jobs[0]} out of {len(jobs)} jobs completed"
+            if processed_jobs[0] >= len(jobs):
                 self.cycle_buttons(False)
-                self.label_generate["text"] = f"Completed all {len(file_chunks)} chunks"
+                self.label_generate["text"] = f"Completed all {len(jobs)} jobs"
                 self.thread_queue.append("enable")
             else:
-                process_next_chunk(index)
+                process_next_job(index)
 
-        process_next_chunk(0)
+        process_next_job(0)
 
 
 

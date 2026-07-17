@@ -11,10 +11,16 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import argparse
 import re
 
-import numpy as np
+from PIL import Image, ImageFont, ImageEnhance, UnidentifiedImageError
 
-from PIL import Image, ImageFont, ImageDraw, ImageEnhance, UnidentifiedImageError
-
+from charlib.image_utils import (
+    create_char_image_dict,
+    get_chars,
+    unite_image,
+    divide_image,
+    save_image,
+    save_text,
+)
 from charlib.terminal import render_terminal_image
 from charlib.player import VideoPlayer
 from charlib.file_utils import optimize_files
@@ -23,174 +29,10 @@ from charlib.file_utils import optimize_files
 characterize_path = os.path.realpath(os.path.dirname(__file__))
 
 
-def amplify_differences(values, threshold):
-    values = np.array(values)
-    deviations = np.abs(values - threshold)
-
-    amplification_factors = np.where(
-        values >= threshold, 1 + deviations, 1 - deviations
-    )
-    amplified_values = np.clip(values * amplification_factors, 0, 1)
-
-    return amplified_values
-
-
-def create_char_image(char, color, detail, font):
-    # create a new image
-    new_image = Image.new("RGBA", (detail, detail), color=(0, 0, 0, 255))
-    # get the font
-    font = ImageFont.truetype(font, detail)
-    # draw the text
-    draw = ImageDraw.Draw(new_image)
-    draw.fontmode = "L"
-    draw.text(
-        ((detail) / 2, (detail) / 2),
-        char,
-        align="center",
-        font=font,
-        fill=color,
-        anchor="mm",
-    )
-    # return the new image as a NumPy array
-    return np.array(new_image)
-
-
-def create_char_image_dict(characters, detail, font, color=False):
-    char_images = {}
-    for char in characters:
-        char_images[char] = create_char_image(
-            char, (255, 255, 255, 255) if not color else (0, 0, 0, 0), detail, font
-        )
-    return char_images
-
-
 def to_hours_minutes_seconds(seconds: float):
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     return "%dh:%02dm:%02ds" % (h, m, s)
-
-
-def get_chars(image, char_list, char_images, format, color):
-    # Convert image to grayscale array normalized between 0 and 1
-    gray_arr = np.array(image.convert("L")) / 255.0
-
-    if not color:
-        # Compute threshold and amplify differences vectorially
-        threshold = np.percentile(gray_arr, 90)
-        amplified = amplify_differences(gray_arr, threshold)
-        indices = (amplified * len(char_list) - 0.5).astype(int)
-    else:
-        indices = (gray_arr * len(char_list) - 0.5).astype(int)
-
-    # Ensure indices are within valid bounds
-    indices = np.clip(indices, 0, len(char_list) - 1)
-
-    # Build list for image output format using vectorized operations
-    if any(x in format for x in ["png", "jpg"]):
-        characters_output = [
-            [char_images[char_list[ix]] for ix in row]
-            for row in indices.tolist()
-        ]
-    else:
-        characters_output = []
-
-    if any(x in format for x in ["txt"]):
-        # Use NumPy indexing for faster mapping
-        char_array = np.array(char_list) # Convert list of characters to NumPy array
-        mapped_chars = char_array[indices] # Map indices to characters using fancy indexing
-        # Mimic original double flip and transpose logic for text output
-        characters_aux = np.fliplr(np.fliplr(mapped_chars.transpose())).tolist()
-    else:
-        characters_aux = []
-
-    return characters_output, characters_aux
-
-
-def unite_image(characters, original_width, original_height, detail_level):
-    """
-    Assembles the final image from individual character images using NumPy for speed.
-    """
-    # Create an empty NumPy array for the final image
-    final_height = original_height * detail_level
-    final_width = original_width * detail_level
-    # Assuming RGBA characters based on previous logic
-    final_image_np = np.zeros((final_height, final_width, 4), dtype=np.uint8)
-
-    # characters is organized as rows (height) then columns (width)
-    for j in range(original_height):
-        for i in range(original_width):
-            # Character is already a NumPy array
-            char_image_np = characters[j][i]
-
-            # Calculate the slice coordinates
-            y_start = j * detail_level
-            y_end = y_start + detail_level
-            x_start = i * detail_level
-            x_end = x_start + detail_level
-            
-            # Place the character array into the final image array
-            # Ensure the character image has the expected dimensions
-            if char_image_np.shape == (detail_level, detail_level, 4):
-                 final_image_np[y_start:y_end, x_start:x_end] = char_image_np
-            else:
-                 # Handle potential size mismatches if necessary (e.g., resize or log warning)
-                 # For now, we assume correct size based on create_char_image
-                 print(f"Warning: Character image size mismatch at ({i},{j}). Expected ({detail_level},{detail_level}), got {char_image_np.shape[:2]}")
-                 # Attempt to paste anyway if dimensions allow, might need resizing logic
-                 try:
-                     final_image_np[y_start:y_end, x_start:x_end] = char_image_np[:detail_level, :detail_level]
-                 except ValueError:
-                     print(f"Error: Could not place character at ({i},{j}) due to size mismatch.")
-
-
-    # Return the final NumPy array directly
-    return final_image_np
-
-
-def divide_image(image, min_size):
-    """
-    Divide the image into smaller parts if its size exceeds the min_size.
-    """
-    image_list = [image]
-
-    while image_list[0].size[0] * image_list[0].size[1] >= min_size:
-        temp_list = []
-        for img in image_list:
-            temp_list.extend(
-                [
-                    img.crop((0, 0, img.width // 2, img.height // 2)),
-                    img.crop((img.width // 2, 0, img.width, img.height // 2)),
-                    img.crop((0, img.height // 2, img.width // 2, img.height)),
-                    img.crop((img.width // 2, img.height // 2, img.width, img.height)),
-                ]
-            )
-        image_list = temp_list.copy()
-
-    return image_list
-
-
-def save_image(image, format, color, filename):
-    save_options = {
-        "png": {"format": "PNG", "compress_level": 9},
-        "jpg": {"format": "JPEG", "quality": 95},
-    }
-
-    for fmt in ["png", "jpg"]:
-        if fmt in format:
-            try:
-                if image.mode != "RGB":
-                    image = image.convert("RGB")
-                if color and fmt == "png":
-                    image = image.quantize(colors=256)
-                image.save(f"{filename}.{fmt}", **save_options[fmt])
-            except Exception as e:
-                print(f"Failed to save {filename}.{fmt}: {e}")
-                raise
-
-
-def save_text(characters, filename):
-    with open(filename, "w", encoding="utf-8") as f:
-        f.writelines(["".join(line) + "\n" for line in characters])
 
 
 def process_routine(
@@ -207,19 +49,20 @@ def process_routine(
 ):
     t_image = time.time()
     image_name = image if isinstance(image, str) else getattr(image, "filename", "image")
+    image_name = image_name.replace("\\", "/")
 
-    # Inform if tkinter is being used
+    # Inform the GUI that processing started
     if tkinter:
-        print(f"<<{image_name}<<P>>")
+        print(f"<<{image_name}<<P>>", flush=True)
 
     # Convert to Image object if not already
     if not isinstance(image, Image.Image):
         original_image_path = image # Store path for error message
         try:
             image = Image.open(image).convert("RGB")
-        except UnidentifiedImageError:
+        except (UnidentifiedImageError, OSError):
             print(f"Warning: Cannot identify image file '{original_image_path}'. Skipping.")
-            return None # Indicate failure
+            return [] # Indicate failure
 
         # Resize the image if needed (only if open succeeded)
         if resize[0]:
@@ -240,84 +83,42 @@ def process_routine(
         else:
             image_list = [image]
     else:
-        image = image.convert("RGB")
-        image_list = [image]
+        image_list = [image.convert("RGB")]
+
+    base_name = "".join(image_name.split("/")[-1].split(".")[:-1])
+    output_root = os.path.join(characterize_path, folder_name)
+    saved = []
 
     # Process each divided image or the whole image
-    for im in image_list:
+    for tile_index, im in enumerate(image_list):
         im = ImageEnhance.Color(im).enhance(2)
         characters_output = get_chars(im, character_list, char_images, output_format, color=color)
-        saved_filename = None
+
+        # ponytail: divided tiles get a _tN suffix instead of being stitched back together
+        tile_suffix = f"_t{tile_index}" if len(image_list) > 1 else ""
+        out_base = os.path.join(output_root, base_name + tile_suffix)
+        saved.append(out_base)
 
         # If saving as text
         if "txt" in output_format:
-            image_name = image_name.replace("\\", "/")
-            filename = os.path.join(
-                os.path.join(characterize_path, folder_name),
-                "".join(image_name.split("/")[-1].split(".")[:-1]) + ".txt",
-            )
+            filename = out_base + ".txt"
             save_text(characters_output[1], filename)
-            saved_filename = filename
             if tkinter:
-                print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>")
+                print(f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename}>>", flush=True)
 
         # If saving as image
         if any(ext in output_format for ext in ["png", "jpg"]):
-            # unite_image now returns a NumPy array directly
             final_image_np = unite_image(
                 characters_output[0], im.width, im.height, character_detail_level
             )
-            # Resize original image to match final output size
-            im_resized = im.resize(
+            # Overlay is exactly the size of the upscaled original: straight alpha composite
+            background = im.resize(
                 (im.width * character_detail_level, im.height * character_detail_level),
-                resample=Image.Resampling.BOX
+                resample=Image.Resampling.BOX,
+            ).convert("RGBA")
+            combined = Image.alpha_composite(
+                background, Image.fromarray(final_image_np, "RGBA")
             )
-
-            # Convert images to NumPy arrays (RGBA)
-            im_np = np.array(im_resized.convert("RGBA"))
-            # No longer needed, final_image_np is already the NumPy array from unite_image
-
-            # Calculate offset for centering final_image on im_resized
-            bg_h, bg_w, _ = im_np.shape
-            img_h, img_w, _ = final_image_np.shape
-            y_offset = (bg_h - img_h) // 2
-            x_offset = (bg_w - img_w) // 2
-
-            # Create combined image array (copy of background)
-            combined_np = im_np.copy()
-
-            # Get the alpha channel of the overlay
-            alpha = final_image_np[:, :, 3] / 255.0
-            alpha = alpha[:, :, np.newaxis] # Reshape for broadcasting
-
-            # Alpha compositing: combined = overlay * alpha + background * (1 - alpha)
-            # Ensure slicing bounds are valid
-            y_start, y_end = max(0, y_offset), min(bg_h, y_offset + img_h)
-            x_start, x_end = max(0, x_offset), min(bg_w, x_offset + img_w)
-            
-            overlay_y_start = max(0, -y_offset)
-            overlay_x_start = max(0, -x_offset)
-            overlay_y_end = overlay_y_start + (y_end - y_start)
-            overlay_x_end = overlay_x_start + (x_end - x_start)
-
-            if y_end > y_start and x_end > x_start: # Check if there is overlap
-                background_slice = combined_np[y_start:y_end, x_start:x_end]
-                overlay_slice = final_image_np[overlay_y_start:overlay_y_end, overlay_x_start:overlay_x_end]
-                alpha_slice = alpha[overlay_y_start:overlay_y_end, overlay_x_start:overlay_x_end]
-
-                # Perform blending only if shapes match
-                if background_slice.shape == overlay_slice.shape:
-                    combined_slice = overlay_slice * alpha_slice + background_slice * (1 - alpha_slice)
-                    combined_np[y_start:y_end, x_start:x_end] = combined_slice.astype(np.uint8)
-                else:
-                     print(f"Warning: Shape mismatch during alpha compositing. BG: {background_slice.shape}, Overlay: {overlay_slice.shape}")
-                     # Fallback or alternative handling if needed
-
-            # Convert back to PIL Image
-            combined = Image.fromarray(combined_np, 'RGBA')
-
-            # Convert back to RGB for saving
-            combined = combined.convert("RGB")
 
             # Optimize the image before saving
             if color:
@@ -325,25 +126,15 @@ def process_routine(
             else:
                 combined = combined.convert("L")
 
-            # Save the image
-            image_name = image_name.replace("\\", "/")
-            filename = os.path.join(
-                os.path.join(characterize_path, folder_name),
-                "".join(image_name.split("/")[-1].split(".")[:-1]),
-            )
-
-            # Start the thread for saving the image
-            save_image(combined, output_format, color, filename)
+            save_image(combined, output_format, color, out_base)
 
             if tkinter:
                 print(
-                    f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{filename+'.png' if 'png' in output_format else filename+'.jpg'}>>"
+                    f"<<{image_name}<<{round(time.time()-t_image, 2)}<<{out_base + ('.png' if 'png' in output_format else '.jpg')}>>",
+                    flush=True,
                 )
 
-            return filename
-
-        if saved_filename:
-            return saved_filename
+    return saved
 
 
 def input_files(text=True):
@@ -507,6 +298,13 @@ def build_parser():
         "--recursive",
         action="store_true",
         help="Scan folders recursively when collecting image inputs",
+    )
+    parser.add_argument(
+        "--tk",
+        "--tkinter",
+        dest="tkinter",
+        action="store_true",
+        help=argparse.SUPPRESS,  # internal: emit <<path<<status>> progress markers for the GUI
     )
     return parser
 
@@ -696,9 +494,6 @@ def run_image_mode(args, image_list):
         if token
     ]
 
-    if "txt" in requested_formats and not os.path.exists(os.path.join(output_root, "text")):
-        os.makedirs(os.path.join(output_root, "text"), exist_ok=True)
-
     output_format = [
         token for token in requested_formats if token in {"png", "jpg", "txt"}
     ]
@@ -730,22 +525,18 @@ def run_image_mode(args, image_list):
 
     if num_iterations == 1:
         internal_time = time.time()
-        results = []
-        for image in image_list:
-            results.append(
-                process_routine(
-                    image,
-                    char_list,
-                    char_images,
-                    detail_level,
-                    divide_image_flag,
-                    output_format,
-                    resize,
-                    args.color,
-                    folder_name,
-                    False,
-                )
-            )
+        results = process_routine(
+            image_list[0],
+            char_list,
+            char_images,
+            detail_level,
+            divide_image_flag,
+            output_format,
+            resize,
+            args.color,
+            folder_name,
+            args.tkinter,
+        )
         print(f"Elapsed time: {to_hours_minutes_seconds(time.time() - internal_time)}")
     else:
         results = []
@@ -762,7 +553,7 @@ def run_image_mode(args, image_list):
                     resize,
                     args.color,
                     folder_name,
-                    False,
+                    args.tkinter,
                 ): i
                 for i in range(num_iterations)
             }
@@ -772,8 +563,9 @@ def run_image_mode(args, image_list):
             for future in as_completed(futures):
                 processed_count += 1
                 batch_count += 1
-                results.append(future.result())
-                if batch_count == t or processed_count == num_iterations:
+                results.extend(future.result())
+                # ponytail: progress prints are suppressed in tkinter mode to keep the marker protocol clean
+                if not args.tkinter and (batch_count == t or processed_count == num_iterations):
                     cycle_time = time.time() - start_cycle
                     avg_time = cycle_time / batch_count
                     remaining = num_iterations - processed_count
@@ -789,12 +581,7 @@ def run_image_mode(args, image_list):
                     start_cycle = time.time()
             print(f"Total execution time: {to_hours_minutes_seconds(time.time() - t0)}")
 
-    results = [item for item in results if item]
-    results = [
-        item
-        for sublist in [[r + f".{f}" for r in results] for f in output_format]
-        for item in sublist
-    ]
+    results = [f"{r}.{f}" for r in results for f in output_format]
 
     if args.optimize and len(results) <= 300:
         if os.path.exists("C:/Program Files/FileOptimizer/FileOptimizer64.exe"):

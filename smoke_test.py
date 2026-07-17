@@ -69,6 +69,7 @@ def make_video(path):
 def main():
     unique = f"characterize_smoke_{uuid.uuid4().hex}"
     output_text = ROOT / "output" / "ascii" / f"{unique}.txt"
+    output_png = ROOT / "output" / "ascii" / f"{unique}.png"
 
     temp_path = ROOT / ".tmp_smoke"
     if temp_path.exists():
@@ -86,6 +87,7 @@ def main():
                 "-m",
                 "py_compile",
                 "characterize.py",
+                "main.py",
                 "charlib/player.py",
                 "charlib/file_utils.py",
             ]
@@ -135,6 +137,48 @@ def main():
             print(f"text export did not create {output_text}")
             raise SystemExit(1)
 
+        png_export = run_command(
+            [
+                sys.executable,
+                "characterize.py",
+                "-i",
+                str(image_path),
+                "-f",
+                "png",
+                "-W",
+                "12",
+                "-H",
+                "6",
+            ]
+        )
+        assert_ok(png_export, "png export")
+        if not output_png.exists():
+            print(f"png export did not create {output_png}")
+            raise SystemExit(1)
+
+        # GUI integration: --tk must be accepted and emit <<path<<status>> markers
+        tk_protocol = run_command(
+            [
+                sys.executable,
+                "characterize.py",
+                "-i",
+                str(image_path),
+                "-f",
+                "txt",
+                "-W",
+                "12",
+                "-H",
+                "6",
+                "--tk",
+            ]
+        )
+        assert_ok(tk_protocol, "tk protocol run")
+        expected_marker = f"<<{str(image_path).replace(os.sep, '/')}<<P>>"
+        if expected_marker not in tk_protocol.stdout.replace("\\", "/"):
+            print("tk protocol markers missing from stdout")
+            print(tk_protocol.stdout)
+            raise SystemExit(1)
+
         if make_video(video_path):
             video_preview = run_command(
                 [
@@ -156,8 +200,9 @@ def main():
             )
             assert_ok(video_preview, "terminal video preview")
     finally:
-        if output_text.exists():
-            output_text.unlink()
+        for artifact in (output_text, output_png):
+            if artifact.exists():
+                artifact.unlink()
         if temp_path.exists():
             shutil.rmtree(temp_path)
 
