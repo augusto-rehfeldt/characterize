@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 import copy
+from datetime import timedelta
 from pathlib import Path
 
 python = sys.executable
@@ -18,11 +19,8 @@ except ImportError as exc:
 
 
 def find_lowest_value(numbers: list) -> int:
-    numbers.sort()
-    for i in range(1, len(numbers)):
-        if numbers[i] > numbers[i-1] + 1:
-            return numbers[i-1] + 1
-    return numbers[-1] + 1
+    taken = set(numbers)
+    return min(n + 1 for n in taken if n + 1 not in taken)
 
 
 def get_image_fingerprint(image_path: str) -> str:
@@ -31,9 +29,7 @@ def get_image_fingerprint(image_path: str) -> str:
 
 
 def to_hours_minutes_seconds(seconds: float) -> str:
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    return "%dh:%02dm:%02ds" % (h, m, s)
+    return str(timedelta(seconds=int(seconds)))
 
 
 # ponytail: return_recursive folded into Path.rglob at the call sites.

@@ -6,7 +6,9 @@ import sys
 import time
 import math
 import pickle
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+from datetime import timedelta
+import subprocess
 
 import argparse
 import re
@@ -23,16 +25,19 @@ from charlib.image_utils import (
 )
 from charlib.terminal import render_terminal_image
 from charlib.player import VideoPlayer
-from charlib.file_utils import optimize_files
 
 
 characterize_path = os.path.realpath(os.path.dirname(__file__))
+FILE_OPTIMIZER = "C:/Program Files/FileOptimizer/FileOptimizer64.exe"
 
 
 def to_hours_minutes_seconds(seconds: float):
-    m, s = divmod(seconds, 60)
-    h, m = divmod(m, 60)
-    return "%dh:%02dm:%02ds" % (h, m, s)
+    return str(timedelta(seconds=int(seconds)))
+
+
+def optimize_files(files, num_threads):
+    with ThreadPoolExecutor(max_workers=num_threads) as executor:
+        executor.map(lambda f: subprocess.run([FILE_OPTIMIZER, f], check=True), files)
 
 
 def process_routine(
@@ -589,7 +594,7 @@ def run_image_mode(args, image_list):
     results = [f"{r}.{f}" for r in results for f in output_format]
 
     if args.optimize and len(results) <= 300:
-        if os.path.exists("C:/Program Files/FileOptimizer/FileOptimizer64.exe"):
+        if os.path.exists(FILE_OPTIMIZER):
             print("\n\nOptimizing files in the background...")
             optimize_files(results, t)
             print("File optimization completed.")

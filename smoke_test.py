@@ -92,7 +92,6 @@ def main():
                 "characterize.py",
                 "main.py",
                 "charlib/player.py",
-                "charlib/file_utils.py",
             ]
         )
         assert_ok(syntax, "syntax check")
