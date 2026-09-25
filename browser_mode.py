@@ -7,6 +7,7 @@ published via GitHub Pages.
 """
 
 import functools
+import sys
 import webbrowser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,7 +20,7 @@ class Quiet(SimpleHTTPRequestHandler):
         pass
 
 
-def serve(port=8765):
+def serve(port=8765, open_browser=True):
     handler = functools.partial(Quiet, directory=str(WEB_DIR))
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), handler)
@@ -27,7 +28,8 @@ def serve(port=8765):
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     url = f"http://localhost:{server.server_address[1]}"
     print(f"Browser mode running at {url} (Ctrl+C to stop)", flush=True)
-    webbrowser.open(url)
+    if open_browser:
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
@@ -35,4 +37,4 @@ def serve(port=8765):
 
 
 if __name__ == "__main__":
-    serve()
+    serve(open_browser="--no-browser" not in sys.argv)

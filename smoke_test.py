@@ -182,7 +182,7 @@ def main():
             raise SystemExit(1)
 
         browser = subprocess.Popen(
-            [sys.executable, "browser_mode.py"],
+            [sys.executable, "browser_mode.py", "--no-browser"],
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
